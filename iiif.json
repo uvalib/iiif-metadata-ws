@@ -12,8 +12,7 @@
             {{- $biblPid := .BiblPID -}}
             {{- $iiifUrl := .IiifURL -}}
             {{range $index, $element := .MasterFiles}}
-            {{- if $index}},
-            {{end -}}
+            {{- if $index}},{{end}}
             {
                "@id":"{{ $iiifUrl }}/dl/{{$biblPid}}/canvas/c{{$index}}",
                "@type":"SC:Canvas",
