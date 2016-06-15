@@ -1,0 +1,47 @@
+{
+   "@context":"http://iiif.io/api/presentation/2/context.json",
+   "@id":"{{.URL}}",
+   "@type":"SC:Manifest",
+   "label":"{{.Title}}",
+   "description":"{{.Description}}",
+   "sequences":[
+      {
+         "@type":"sc:Sequence",
+         "viewingHint":"paged",
+         "canvases":[
+            {{- $biblPid := .BiblPID -}}
+            {{- $iiifUrl := .IiifURL -}}
+            {{range $index, $element := .MasterFiles}}
+            {{- if $index}},
+            {{end -}}
+            {
+               "@id":"{{ $iiifUrl }}/dl/{{$biblPid}}/canvas/c{{$index}}",
+               "@type":"SC:Canvas",
+               "label":"{{.Title}}",
+               "thumbnail":"{{ $iiifUrl }}/{{.PID}}/full/90,146/0/default.jpg",
+               "width":"{{.Width}}",
+               "height":"{{.Height}}",
+               "images":[
+                  {
+                     "@type":"oa:Annotation",
+                     "motivation":"sc:painting",
+                     "resource":{
+                        "@type":"dcTypes:Image",
+                        "format":"image/jp2",
+                        "width":"{{.Width}}",
+                        "height":"{{.Height}}",
+                        "service":{
+                           "@context":"http://iiif.io/api/image/2/context.json",
+                           "@id":"{{$iiifUrl}}/{{.PID}}",
+                           "profile":"http://iiif.io/api/image/2/level1.json"
+                        }
+                     },
+                     "on":"{{$iiifUrl}}/dl/{{$biblPid}}/canvas/c{{$index}}"
+                  }
+               ]
+            }
+            {{- end}}
+         ]
+      }
+   ]
+}
