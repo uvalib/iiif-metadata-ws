@@ -57,8 +57,17 @@ func main() {
 	// Set routes and start server
 	mux := bone.New()
 	mux.Get("/iiif/:pid/manifest.json", http.HandlerFunc(iiifHandler))
+	mux.Get("/iiif/:pid", http.HandlerFunc(iiifHandler))
+	mux.Get("/", http.HandlerFunc(rootHandler))
 	fmt.Printf("Starting metadata server on port %s...", viper.GetString("port"))
 	http.ListenAndServe(":"+viper.GetString("port"), mux)
+}
+
+/**
+ * Handle a request for /
+ */
+func rootHandler(rw http.ResponseWriter, req *http.Request) {
+	fmt.Fprintf(rw, "IIIF metadata service. Usage: ./iiif/[pid]/manifest.json")
 }
 
 /**
