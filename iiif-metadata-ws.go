@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 
@@ -13,6 +14,7 @@ import (
 )
 
 var db *sql.DB // global variable to share it between main and the HTTP handler
+var logger *log.Logger
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
@@ -34,7 +36,13 @@ type iiifData struct {
  * Main entry point for the web service
  */
 func main() {
+	lf, _ := os.OpenFile("service.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	defer lf.Close()
+	logger = log.New(lf, "service: ", log.LstdFlags)
+
 	// Load cfg
+	logger.Printf("===> iiif-metadata-ws staring up <===")
+	logger.Printf("Load configuration...")
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
 	viper.AddConfigPath(".")
@@ -45,6 +53,7 @@ func main() {
 	}
 
 	// Init DB connection
+	logger.Printf("Init DB connection...")
 	connectStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", viper.GetString("db_user"), viper.GetString("db_pass"),
 		viper.GetString("db_host"), viper.GetString("db_name"))
 	db, err = sql.Open("mysql", connectStr)
@@ -59,7 +68,7 @@ func main() {
 	mux.Get("/iiif/:pid/manifest.json", http.HandlerFunc(iiifHandler))
 	mux.Get("/iiif/:pid", http.HandlerFunc(iiifHandler))
 	mux.Get("/", http.HandlerFunc(rootHandler))
-	fmt.Printf("Starting metadata server on port %s...", viper.GetString("port"))
+	logger.Printf("Start service on port %s", viper.GetString("port"))
 	http.ListenAndServe(":"+viper.GetString("port"), mux)
 }
 
@@ -67,6 +76,7 @@ func main() {
  * Handle a request for /
  */
 func rootHandler(rw http.ResponseWriter, req *http.Request) {
+	logger.Printf("%s %s", req.Method, req.RequestURI)
 	fmt.Fprintf(rw, "IIIF metadata service. Usage: ./iiif/[pid]/manifest.json")
 }
 
@@ -74,6 +84,7 @@ func rootHandler(rw http.ResponseWriter, req *http.Request) {
  * Handle a request for IIIF metdata; returns json
  */
 func iiifHandler(rw http.ResponseWriter, req *http.Request) {
+	logger.Printf("%s %s", req.Method, req.RequestURI)
 	pid := bone.GetValue(req, "pid")
 
 	// init template data with request URL
@@ -88,10 +99,12 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request) {
 	err := db.QueryRow(qs, pid).Scan(&biblID, &data.Title, &data.Description, &data.BiblPID, &availability)
 	switch {
 	case err == sql.ErrNoRows:
+		logger.Printf("%s not found", pid)
 		rw.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(rw, "%s not found", pid)
 		return
 	case err != nil:
+		logger.Printf("Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
 		return
@@ -99,6 +112,7 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request) {
 
 	// Must have availability set
 	if availability.Valid == false {
+		logger.Printf("%s not found", pid)
 		rw.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(rw, "%s not found", pid)
 		return
@@ -117,6 +131,7 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request) {
 		var mf masterFile
 		err = rows.Scan(&mf.PID, &mf.Title, &mf.Width, &mf.Height)
 		if err != nil {
+			logger.Printf("Unable to retreive IIIF MasterFile metadata for %s: %s", pid, err.Error())
 			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
 			return
 		}
@@ -127,7 +142,9 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request) {
 	tmpl, _ := template.ParseFiles("iiif.json")
 	err = tmpl.ExecuteTemplate(rw, "iiif.json", data)
 	if err != nil {
+		logger.Printf("Unable to render IIIF metadata for %s: %s", pid, err.Error())
 		fmt.Fprintf(rw, "Unable to render IIIF metadata: %s", err.Error())
 		return
 	}
+	logger.Printf("IIIF Metadata generated for %s", pid)
 }
