@@ -7,7 +7,6 @@
    "sequences":[
       {
          "@type":"sc:Sequence",
-         "viewingHint":"paged",
          "canvases":[
             {{- $biblPid := .BiblPID -}}
             {{- $iiifUrl := .IiifURL -}}
