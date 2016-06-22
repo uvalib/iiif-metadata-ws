@@ -9,7 +9,7 @@ import (
 	"os"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/go-zoo/bone"
+	"github.com/julienschmidt/httprouter"
 	"github.com/spf13/viper"
 )
 
@@ -54,8 +54,8 @@ func main() {
 
 	// Init DB connection
 	logger.Printf("Init DB connection...")
-	connectStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", viper.GetString("db_user"), viper.GetString("db_pass"),
-		viper.GetString("db_host"), viper.GetString("db_name"))
+	connectStr := fmt.Sprintf("%s:%s@tcp(%s)/%s?allowOldPasswords=%s", viper.GetString("db_user"), viper.GetString("db_pass"),
+		viper.GetString("db_host"), viper.GetString("db_name"), viper.GetString("db_old_passwords"))
 	db, err = sql.Open("mysql", connectStr)
 	if err != nil {
 		fmt.Printf("Database connection failed: %s", err.Error())
@@ -64,10 +64,10 @@ func main() {
 	defer db.Close()
 
 	// Set routes and start server
-	mux := bone.New()
-	mux.Get("/iiif/:pid/manifest.json", http.HandlerFunc(iiifHandler))
-	mux.Get("/iiif/:pid", http.HandlerFunc(iiifHandler))
-	mux.Get("/", http.HandlerFunc(rootHandler))
+	mux := httprouter.New()
+	mux.GET("/", rootHandler)
+	mux.GET("/iiif/:pid/manifest.json", iiifHandler)
+	mux.GET("/iiif/:pid", iiifHandler)
 	logger.Printf("Start service on port %s", viper.GetString("port"))
 	http.ListenAndServe(":"+viper.GetString("port"), mux)
 }
@@ -75,7 +75,7 @@ func main() {
 /**
  * Handle a request for /
  */
-func rootHandler(rw http.ResponseWriter, req *http.Request) {
+func rootHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	logger.Printf("%s %s", req.Method, req.RequestURI)
 	fmt.Fprintf(rw, "IIIF metadata service. Usage: ./iiif/[pid]/manifest.json")
 }
@@ -83,9 +83,9 @@ func rootHandler(rw http.ResponseWriter, req *http.Request) {
 /**
  * Handle a request for IIIF metdata; returns json
  */
-func iiifHandler(rw http.ResponseWriter, req *http.Request) {
+func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	logger.Printf("%s %s", req.Method, req.RequestURI)
-	pid := bone.GetValue(req, "pid")
+	pid := params.ByName("pid")
 
 	// init template data with request URL
 	var data iiifData
@@ -95,8 +95,9 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request) {
 	// Get BIBL data for the passed PID
 	var availability sql.NullInt64
 	var biblID int
+	var desc sql.NullString
 	qs := "select b.id,b.title,b.description,b.pid,b.availability_policy_id from bibls b where pid=?"
-	err := db.QueryRow(qs, pid).Scan(&biblID, &data.Title, &data.Description, &data.BiblPID, &availability)
+	err := db.QueryRow(qs, pid).Scan(&biblID, &data.Title, &desc, &data.BiblPID, &availability)
 	switch {
 	case err == sql.ErrNoRows:
 		logger.Printf("%s not found", pid)
@@ -119,6 +120,11 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request) {
 	}
 	if availability.Int64 == 3 {
 		data.IiifURL = viper.GetString("iiif_uvaonly_url")
+	}
+
+	// set description if it is available
+	if desc.Valid == true {
+		data.Description = desc.String
 	}
 
 	// Get data for all master files from units associated with bibl
