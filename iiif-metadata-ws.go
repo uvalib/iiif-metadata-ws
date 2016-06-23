@@ -87,24 +87,41 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 	logger.Printf("%s %s", req.Method, req.RequestURI)
 	pid := params.ByName("pid")
 
-	// init template data with request URL
+	// first see if this PID is a bibl or MasterFile
+	var cnt int
+	isBibl := true
+	qs := "select count(*) as cnt from bibls b where pid=?"
+	db.QueryRow(qs, pid).Scan(&cnt)
+	if cnt == 0 {
+		isBibl = false
+		qs = "select count(*) as cnt from master_files b where pid=?"
+		db.QueryRow(qs, pid).Scan(&cnt)
+		if cnt == 0 {
+			logger.Printf("%s not found", pid)
+			rw.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(rw, "%s not found", pid)
+			return
+		}
+	}
+
 	var data iiifData
 	data.URL = fmt.Sprintf("http://%s%s", req.Host, req.URL)
-	data.IiifURL = viper.GetString("iiif_url") // default to this; set to UVA only after bibl retrieved
+	data.IiifURL = viper.GetString("iiif_url")
+	if isBibl == true {
+		data.BiblPID = pid
+		generateBiblMetadata(data, rw)
+	} else {
+		generateMasterFileMetadata(pid, data, rw)
+	}
+}
 
-	// Get BIBL data for the passed PID
+func generateBiblMetadata(data iiifData, rw http.ResponseWriter) {
 	var availability sql.NullInt64
 	var biblID int
 	var desc sql.NullString
-	qs := "select b.id,b.title,b.description,b.pid,b.availability_policy_id from bibls b where pid=?"
-	err := db.QueryRow(qs, pid).Scan(&biblID, &data.Title, &desc, &data.BiblPID, &availability)
-	switch {
-	case err == sql.ErrNoRows:
-		logger.Printf("%s not found", pid)
-		rw.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(rw, "%s not found", pid)
-		return
-	case err != nil:
+	qs := "select b.id, b.title, b.description, b.availability_policy_id from bibls b where pid=?"
+	err := db.QueryRow(qs, data.BiblPID).Scan(&biblID, &data.Title, &desc, &availability)
+	if err != nil {
 		logger.Printf("Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
@@ -113,9 +130,9 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 
 	// Must have availability set
 	if availability.Valid == false {
-		logger.Printf("%s not found", pid)
+		logger.Printf("%s not found", data.BiblPID)
 		rw.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(rw, "%s not found", pid)
+		fmt.Fprintf(rw, "%s not found", data.BiblPID)
 		return
 	}
 	if availability.Int64 == 3 {
@@ -129,28 +146,67 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 
 	// Get data for all master files from units associated with bibl
 	qs = `select m.pid, m.title, t.width, t.height from master_files m
-         inner join units u on u.id=m.unit_id
-         inner join image_tech_meta t on m.id=t.master_file_id where u.bibl_id = ?`
+	      inner join units u on u.id=m.unit_id
+	      inner join image_tech_meta t on m.id=t.master_file_id where u.bibl_id = ?`
 	rows, _ := db.Query(qs, biblID)
 	defer rows.Close()
 	for rows.Next() {
 		var mf masterFile
 		err = rows.Scan(&mf.PID, &mf.Title, &mf.Width, &mf.Height)
 		if err != nil {
-			logger.Printf("Unable to retreive IIIF MasterFile metadata for %s: %s", pid, err.Error())
+			logger.Printf("Unable to retreive IIIF MasterFile metadata for %s: %s", data.BiblPID, err.Error())
 			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
 			return
 		}
 		data.MasterFiles = append(data.MasterFiles, mf)
 	}
+	renderMetadata(data, rw)
+}
 
-	// Render the json template with all of the data collected above
+func renderMetadata(data iiifData, rw http.ResponseWriter) {
 	tmpl, _ := template.ParseFiles("iiif.json")
-	err = tmpl.ExecuteTemplate(rw, "iiif.json", data)
+	err := tmpl.ExecuteTemplate(rw, "iiif.json", data)
 	if err != nil {
-		logger.Printf("Unable to render IIIF metadata for %s: %s", pid, err.Error())
+		logger.Printf("Unable to render IIIF metadata for %s: %s", data.BiblPID, err.Error())
 		fmt.Fprintf(rw, "Unable to render IIIF metadata: %s", err.Error())
 		return
 	}
-	logger.Printf("IIIF Metadata generated for %s", pid)
+	logger.Printf("IIIF Metadata generated for %s", data.BiblPID)
+}
+
+func generateMasterFileMetadata(mfPid string, data iiifData, rw http.ResponseWriter) {
+	var availability sql.NullInt64
+	var desc sql.NullString
+	var mf masterFile
+	mf.PID = mfPid
+	qs := `select b.pid, b.title, b.description, b.availability_policy_id, m.title, t.width, t.height from master_files m
+	      inner join units u on u.id=m.unit_id
+         inner join bibls b on u.bibl_id=b.id
+	      inner join image_tech_meta t on m.id=t.master_file_id where m.pid = ?`
+	err := db.QueryRow(qs, mfPid).Scan(&data.BiblPID, &data.Title, &desc, &availability, &mf.Title, &mf.Width, &mf.Height)
+	if err != nil {
+		logger.Printf("Request failed: %s", err.Error())
+		rw.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
+		return
+	}
+
+	// Must have availability set
+	if availability.Valid == false {
+		logger.Printf("%s not found", data.BiblPID)
+		rw.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(rw, "%s not found", data.BiblPID)
+		return
+	}
+	if availability.Int64 == 3 {
+		data.IiifURL = viper.GetString("iiif_uvaonly_url")
+	}
+
+	// set description if it is available
+	if desc.Valid == true {
+		data.Description = desc.String
+	}
+	data.MasterFiles = append(data.MasterFiles, mf)
+
+	renderMetadata(data, rw)
 }
