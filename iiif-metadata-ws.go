@@ -108,9 +108,11 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 	data.URL = fmt.Sprintf("http://%s%s", req.Host, req.URL)
 	data.IiifURL = viper.GetString("iiif_url")
 	if isBibl == true {
+		logger.Printf("%s is a bibl", pid)
 		data.BiblPID = pid
 		generateBiblMetadata(data, rw)
 	} else {
+		logger.Printf("%s is a masterfile", pid)
 		generateMasterFileMetadata(pid, data, rw)
 	}
 }
