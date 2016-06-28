@@ -10,6 +10,8 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/julienschmidt/httprouter"
+	"github.com/lestrrat/go-libxml2"
+	"github.com/lestrrat/go-libxml2/xpath"
 	"github.com/spf13/viper"
 )
 
@@ -40,6 +42,8 @@ func main() {
 	lf, _ := os.OpenFile("service.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 	defer lf.Close()
 	logger = log.New(lf, "service: ", log.LstdFlags)
+	// use below to log to console....
+	// logger = log.New(os.Stdout, "logger: ", log.LstdFlags)
 
 	// Load cfg
 	logger.Printf("===> iiif-metadata-ws staring up <===")
@@ -119,27 +123,15 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 }
 
 func generateBiblMetadata(data iiifData, rw http.ResponseWriter) {
-	var availability sql.NullInt64
 	var biblID int
 	var desc sql.NullString
-	qs := "select b.id, b.title, b.description, b.availability_policy_id from bibls b where pid=?"
-	err := db.QueryRow(qs, data.BiblPID).Scan(&biblID, &data.Title, &desc, &availability)
+	qs := "select b.id, b.title, b.description from bibls b where pid=?"
+	err := db.QueryRow(qs, data.BiblPID).Scan(&biblID, &data.Title, &desc)
 	if err != nil {
 		logger.Printf("Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
 		return
-	}
-
-	// Must have availability set
-	if availability.Valid == false {
-		logger.Printf("%s not found", data.BiblPID)
-		rw.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(rw, "%s not found", data.BiblPID)
-		return
-	}
-	if availability.Int64 == 3 {
-		data.IiifURL = viper.GetString("iiif_uvaonly_url")
 	}
 
 	// set description if it is available
@@ -180,16 +172,16 @@ func renderMetadata(data iiifData, rw http.ResponseWriter) {
 }
 
 func generateMasterFileMetadata(mfPid string, data iiifData, rw http.ResponseWriter) {
-	var availability sql.NullInt64
 	var desc sql.NullString
 	var mfDesc sql.NullString
+	var mfDescMetadata sql.NullString
 	var mf masterFile
 	mf.PID = mfPid
-	qs := `select b.pid, b.title, b.description, b.availability_policy_id, m.title, m.description, t.width, t.height from master_files m
+	qs := `select b.pid, b.title, b.description, m.title, m.description, m.desc_metadata, t.width, t.height from master_files m
 	      inner join units u on u.id=m.unit_id
          inner join bibls b on u.bibl_id=b.id
 	      inner join image_tech_meta t on m.id=t.master_file_id where m.pid = ?`
-	err := db.QueryRow(qs, mfPid).Scan(&data.BiblPID, &data.Title, &desc, &availability, &mf.Title, &mfDesc, &mf.Width, &mf.Height)
+	err := db.QueryRow(qs, mfPid).Scan(&data.BiblPID, &data.Title, &desc, &mf.Title, &mfDesc, &mfDescMetadata, &mf.Width, &mf.Height)
 	if err != nil {
 		logger.Printf("Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusBadRequest)
@@ -197,21 +189,63 @@ func generateMasterFileMetadata(mfPid string, data iiifData, rw http.ResponseWri
 		return
 	}
 
-	// Must have availability set
-	if availability.Valid == false {
-		logger.Printf("%s not found", data.BiblPID)
-		rw.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(rw, "%s not found", data.BiblPID)
-		return
-	}
-	if availability.Int64 == 3 {
-		data.IiifURL = viper.GetString("iiif_uvaonly_url")
-	}
-
-	// set description if it is available
+	// set descriptions if available
 	data.Description = desc.String
 	mf.Description = mfDesc.String
+
+	// MODS desc metadata in record overrides title and desc
+	if mfDescMetadata.Valid {
+		parseMods(&mf, mfDescMetadata.String)
+	}
+
 	data.MasterFiles = append(data.MasterFiles, mf)
 
 	renderMetadata(data, rw)
+}
+
+/**
+ * Parse title and description from MODS string
+ */
+func parseMods(data *masterFile, mods string) {
+	doc, err := libxml2.ParseString(mods)
+	if err != nil {
+		logger.Printf("Unable to parse MODS: %s; just using data from DB", err.Error())
+		return
+	}
+	defer doc.Free()
+
+	root, err := doc.DocumentElement()
+	if err != nil {
+		logger.Printf("Failed to fetch document element: %s", err)
+		return
+	}
+
+	ctx, err := xpath.NewContext(root)
+	if err != nil {
+		logger.Printf("Failed to create xpath context: %s", err)
+		return
+	}
+	defer ctx.Free()
+
+	if err := ctx.RegisterNS("ns", "http://www.loc.gov/mods/v3"); err != nil {
+		logger.Printf("Failed to register namespace: %s", err)
+		return
+	}
+	title := xpath.String(ctx.Find("/ns:mods/ns:titleInfo/ns:title/text()"))
+	if len(title) > 0 {
+		data.Title = title
+	}
+
+	// first try <abstract displayLabel="Description">
+	desc := xpath.String(ctx.Find("//ns:abstract[@displayLabel='Description']/text()"))
+	if len(desc) > 0 {
+		data.Description = desc
+		return
+	}
+
+	// .. next try for a provenance note
+	desc = xpath.String(ctx.Find("//ns:note[@type='provenance' and @displayLabel='staff']/text()"))
+	if len(desc) > 0 {
+		data.Description = fmt.Sprintf("Staff note: %s", desc)
+	}
 }

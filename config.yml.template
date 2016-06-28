@@ -4,5 +4,4 @@ db_pass: PASS
 db_name: tracksys3_development
 db_host: localhost:3306
 db_old_passwords: false
-iiif_url: http://iiif.lib.virginia.edu/iiif           # for images with public availability policy
-iiif_uvaonly_url: http://iiif.lib.virginia.edu/iiif   # for images with UVA Only availability policy
+iiif_url: http://iiif.lib.virginia.edu/iiif  
