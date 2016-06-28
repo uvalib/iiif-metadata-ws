@@ -16,6 +16,7 @@
                "@id":"{{ $iiifUrl }}/dl/{{$biblPid}}/canvas/c{{$index}}",
                "@type":"SC:Canvas",
                "label":"{{.Title}}",
+               "description":"{{.Description}}",
                "thumbnail":"{{ $iiifUrl }}/{{.PID}}/full/90,146/0/default.jpg",
                "width":"{{.Width}}",
                "height":"{{.Height}}",

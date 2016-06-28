@@ -18,10 +18,11 @@ var logger *log.Logger
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
-	PID    string
-	Title  string
-	Width  int
-	Height int
+	PID         string
+	Title       string
+	Description string
+	Width       int
+	Height      int
 }
 type iiifData struct {
 	IiifURL     string
@@ -147,19 +148,21 @@ func generateBiblMetadata(data iiifData, rw http.ResponseWriter) {
 	}
 
 	// Get data for all master files from units associated with bibl
-	qs = `select m.pid, m.title, t.width, t.height from master_files m
+	qs = `select m.pid, m.title, m.description, t.width, t.height from master_files m
 	      inner join units u on u.id=m.unit_id
 	      inner join image_tech_meta t on m.id=t.master_file_id where u.bibl_id = ?`
 	rows, _ := db.Query(qs, biblID)
 	defer rows.Close()
 	for rows.Next() {
 		var mf masterFile
-		err = rows.Scan(&mf.PID, &mf.Title, &mf.Width, &mf.Height)
+		var mfDesc sql.NullString
+		err = rows.Scan(&mf.PID, &mf.Title, &mfDesc, &mf.Width, &mf.Height)
 		if err != nil {
 			logger.Printf("Unable to retreive IIIF MasterFile metadata for %s: %s", data.BiblPID, err.Error())
 			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
 			return
 		}
+		mf.Description = mfDesc.String
 		data.MasterFiles = append(data.MasterFiles, mf)
 	}
 	renderMetadata(data, rw)
@@ -179,13 +182,14 @@ func renderMetadata(data iiifData, rw http.ResponseWriter) {
 func generateMasterFileMetadata(mfPid string, data iiifData, rw http.ResponseWriter) {
 	var availability sql.NullInt64
 	var desc sql.NullString
+	var mfDesc sql.NullString
 	var mf masterFile
 	mf.PID = mfPid
-	qs := `select b.pid, b.title, b.description, b.availability_policy_id, m.title, t.width, t.height from master_files m
+	qs := `select b.pid, b.title, b.description, b.availability_policy_id, m.title, m.description, t.width, t.height from master_files m
 	      inner join units u on u.id=m.unit_id
          inner join bibls b on u.bibl_id=b.id
 	      inner join image_tech_meta t on m.id=t.master_file_id where m.pid = ?`
-	err := db.QueryRow(qs, mfPid).Scan(&data.BiblPID, &data.Title, &desc, &availability, &mf.Title, &mf.Width, &mf.Height)
+	err := db.QueryRow(qs, mfPid).Scan(&data.BiblPID, &data.Title, &desc, &availability, &mf.Title, &mfDesc, &mf.Width, &mf.Height)
 	if err != nil {
 		logger.Printf("Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusBadRequest)
@@ -205,9 +209,8 @@ func generateMasterFileMetadata(mfPid string, data iiifData, rw http.ResponseWri
 	}
 
 	// set description if it is available
-	if desc.Valid == true {
-		data.Description = desc.String
-	}
+	data.Description = desc.String
+	mf.Description = mfDesc.String
 	data.MasterFiles = append(data.MasterFiles, mf)
 
 	renderMetadata(data, rw)
