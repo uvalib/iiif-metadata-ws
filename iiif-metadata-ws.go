@@ -18,6 +18,8 @@ import (
 var db *sql.DB // global variable to share it between main and the HTTP handler
 var logger *log.Logger
 
+const version = "1.0.0"
+
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
 	PID         string
@@ -71,8 +73,8 @@ func main() {
 	// Set routes and start server
 	mux := httprouter.New()
 	mux.GET("/", rootHandler)
-	mux.GET("/iiif/:pid/manifest.json", iiifHandler)
-	mux.GET("/iiif/:pid", iiifHandler)
+	mux.GET("/:pid/manifest.json", iiifHandler)
+	mux.GET("/:pid", iiifHandler)
 	logger.Printf("Start service on port %s", viper.GetString("port"))
 	http.ListenAndServe(":"+viper.GetString("port"), mux)
 }
@@ -82,7 +84,7 @@ func main() {
  */
 func rootHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	logger.Printf("%s %s", req.Method, req.RequestURI)
-	fmt.Fprintf(rw, "IIIF metadata service. Usage: ./iiif/[pid]/manifest.json")
+	fmt.Fprintf(rw, "IIIF metadata service version %s", version)
 }
 
 /**
