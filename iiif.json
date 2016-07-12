@@ -24,6 +24,11 @@
                   {
                      "@type":"oa:Annotation",
                      "motivation":"sc:painting",
+                     {{- if .Transcription}}
+                     "metadata": [
+                        {"label": "transcription", "value": "{{.Transcription}}"}
+                     ],
+                     {{- end}}
                      "resource":{
                         "@id":"{{$iiifUrl}}/{{.PID}}",
                         "@type":"dcTypes:Image",

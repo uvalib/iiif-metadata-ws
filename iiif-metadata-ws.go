@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/julienschmidt/httprouter"
@@ -22,11 +23,12 @@ const version = "1.0.0"
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
-	PID         string
-	Title       string
-	Description string
-	Width       int
-	Height      int
+	PID           string
+	Title         string
+	Description   string
+	Width         int
+	Height        int
+	Transcription string
 }
 type iiifData struct {
 	IiifURL     string
@@ -142,7 +144,7 @@ func generateBiblMetadata(data iiifData, rw http.ResponseWriter) {
 	}
 
 	// Get data for all master files from units associated with bibl
-	qs = `select m.pid, m.title, m.description, t.width, t.height from master_files m
+	qs = `select m.pid, m.title, m.description, m.transcription_text, t.width, t.height from master_files m
 	      inner join units u on u.id=m.unit_id
 	      inner join image_tech_meta t on m.id=t.master_file_id where u.bibl_id = ?`
 	rows, _ := db.Query(qs, biblID)
@@ -150,13 +152,18 @@ func generateBiblMetadata(data iiifData, rw http.ResponseWriter) {
 	for rows.Next() {
 		var mf masterFile
 		var mfDesc sql.NullString
-		err = rows.Scan(&mf.PID, &mf.Title, &mfDesc, &mf.Width, &mf.Height)
+		var mfTrans sql.NullString
+		err = rows.Scan(&mf.PID, &mf.Title, &mfDesc, &mfTrans, &mf.Width, &mf.Height)
 		if err != nil {
 			logger.Printf("Unable to retreive IIIF MasterFile metadata for %s: %s", data.BiblPID, err.Error())
 			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
 			return
 		}
 		mf.Description = mfDesc.String
+		if mfTrans.Valid {
+			mf.Transcription = strings.Replace(mfTrans.String, "\n", "\\n", -1)
+			mf.Transcription = strings.Replace(mf.Transcription, "\r", "", -1)
+		}
 		data.MasterFiles = append(data.MasterFiles, mf)
 	}
 	renderMetadata(data, rw)
@@ -164,7 +171,7 @@ func generateBiblMetadata(data iiifData, rw http.ResponseWriter) {
 
 func renderMetadata(data iiifData, rw http.ResponseWriter) {
 	rw.Header().Set("Access-Control-Allow-Origin", "*")
-	rw.Header().Set("content-type", "application/json")
+	rw.Header().Set("content-type", "application/json; charset=utf-8")
 	tmpl, _ := template.ParseFiles("iiif.json")
 	err := tmpl.ExecuteTemplate(rw, "iiif.json", data)
 	if err != nil {
