@@ -163,6 +163,8 @@ func generateBiblMetadata(data iiifData, rw http.ResponseWriter) {
 }
 
 func renderMetadata(data iiifData, rw http.ResponseWriter) {
+	rw.Header().Set("Access-Control-Allow-Origin", "*")
+	rw.Header().Set("content-type", "application/json")
 	tmpl, _ := template.ParseFiles("iiif.json")
 	err := tmpl.ExecuteTemplate(rw, "iiif.json", data)
 	if err != nil {

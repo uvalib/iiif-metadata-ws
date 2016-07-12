@@ -18,17 +18,18 @@
                "label":"{{.Title}}",
                "description":"{{.Description}}",
                "thumbnail":"{{ $iiifUrl }}/{{.PID}}/full/90,146/0/default.jpg",
-               "width":"{{.Width}}",
-               "height":"{{.Height}}",
+               "width": {{.Width}},
+               "height": {{.Height}},
                "images":[
                   {
                      "@type":"oa:Annotation",
                      "motivation":"sc:painting",
                      "resource":{
+                        "@id":"{{$iiifUrl}}/{{.PID}}",
                         "@type":"dcTypes:Image",
                         "format":"image/jp2",
-                        "width":"{{.Width}}",
-                        "height":"{{.Height}}",
+                        "width": {{.Width}},
+                        "height": {{.Height}},
                         "service":{
                            "@context":"http://iiif.io/api/image/2/context.json",
                            "@id":"{{$iiifUrl}}/{{.PID}}",
