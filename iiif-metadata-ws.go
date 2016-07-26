@@ -19,7 +19,7 @@ import (
 var db *sql.DB // global variable to share it between main and the HTTP handler
 var logger *log.Logger
 
-const version = "1.0.1"
+const version = "1.1.0"
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
@@ -96,34 +96,55 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 	logger.Printf("%s %s", req.Method, req.RequestURI)
 	pid := params.ByName("pid")
 
-	// first see if this PID is a bibl or MasterFile
-	var cnt int
-	isBibl := true
-	qs := "select count(*) as cnt from bibls b where pid=?"
-	db.QueryRow(qs, pid).Scan(&cnt)
-	if cnt == 0 {
-		isBibl = false
-		qs = "select count(*) as cnt from master_files b where pid=?"
-		db.QueryRow(qs, pid).Scan(&cnt)
-		if cnt == 0 {
-			logger.Printf("%s not found", pid)
-			rw.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(rw, "%s not found", pid)
-			return
-		}
-	}
-
+	// initialize IIIF data struct
 	var data iiifData
 	data.URL = fmt.Sprintf("http://%s%s", req.Host, req.URL)
 	data.IiifURL = viper.GetString("iiif_url")
-	if isBibl == true {
+
+	// handle different types of PID
+	pidType := determinePidType(pid)
+	if pidType == "bibl" {
 		logger.Printf("%s is a bibl", pid)
 		data.BiblPID = pid
 		generateBiblMetadata(data, rw)
-	} else {
+	} else if pidType == "master_file" {
 		logger.Printf("%s is a masterfile", pid)
 		generateMasterFileMetadata(pid, data, rw)
+	} else if pidType == "item" {
+		logger.Printf("%s is an item", pid)
+		generateItemMetadata(pid, data, rw)
+	} else {
+		logger.Printf("Couldn't find %s", pid)
+		rw.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(rw, "PID %s not found", pid)
 	}
+}
+
+func determinePidType(pid string) (pidType string) {
+	var cnt int
+	pidType = "invalid"
+	qs := "select count(*) as cnt from bibls b where pid=?"
+	db.QueryRow(qs, pid).Scan(&cnt)
+	if cnt == 1 {
+		pidType = "bibl"
+		return
+	}
+
+	qs = "select count(*) as cnt from master_files b where pid=?"
+	db.QueryRow(qs, pid).Scan(&cnt)
+	if cnt == 1 {
+		pidType = "master_file"
+		return
+	}
+
+	qs = "select count(*) as cnt from items b where pid=?"
+	db.QueryRow(qs, pid).Scan(&cnt)
+	if cnt == 1 {
+		pidType = "item"
+		return
+	}
+
+	return
 }
 
 func generateBiblMetadata(data iiifData, rw http.ResponseWriter) {
@@ -180,6 +201,64 @@ func renderMetadata(data iiifData, rw http.ResponseWriter) {
 		return
 	}
 	logger.Printf("IIIF Metadata generated for %s", data.BiblPID)
+}
+
+func generateItemMetadata(pid string, data iiifData, rw http.ResponseWriter) {
+	// grab all of the masterfiles hooked to this item
+	var extURI sql.NullString
+	var unitID int
+	var itemID int
+	qs := `select id, external_uri, unit_id from items where pid=?`
+	err := db.QueryRow(qs, pid).Scan(&itemID, &extURI, &unitID)
+	if err != nil {
+		logger.Printf("Request failed: %s", err.Error())
+		rw.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
+		return
+	}
+
+	// Get data for all master files attached to this item
+	qs = `select m.pid, m.title, m.description, m.transcription_text, m.desc_metadata, t.width, t.height from master_files m
+	      inner join image_tech_meta t on m.id=t.master_file_id where m.item_id = ?`
+	rows, _ := db.Query(qs, itemID)
+	defer rows.Close()
+	for rows.Next() {
+		var mf masterFile
+		var mfDesc sql.NullString
+		var mfTrans sql.NullString
+		var mfDescMetadata sql.NullString
+		err = rows.Scan(&mf.PID, &mf.Title, &mfDesc, &mfTrans, &mfDescMetadata, &mf.Width, &mf.Height)
+		if err != nil {
+			logger.Printf("Unable to retreive IIIF MasterFile metadata for %s: %s", data.BiblPID, err.Error())
+			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
+			return
+		}
+		mf.Description = mfDesc.String
+		if mfTrans.Valid {
+			mf.Transcription = strings.Replace(mfTrans.String, "\n", "\\n", -1)
+			mf.Transcription = strings.Replace(mf.Transcription, "\r", "", -1)
+		}
+		// MODS desc metadata in record overrides title and desc
+		if mfDescMetadata.Valid {
+			parseMods(&mf, mfDescMetadata.String)
+		}
+		data.MasterFiles = append(data.MasterFiles, mf)
+	}
+
+	// TODO when extURI is populated, go scrape external system for metadata
+	// since this will be blank for some time, it is being ignored and bibl is pulled
+
+	qs = `select b.title, b.description from units u inner join bibls b on u.bibl_id=b.id where u.id=?`
+	var desc sql.NullString
+	err = db.QueryRow(qs, unitID).Scan(&data.Title, &desc)
+	if err != nil {
+		logger.Printf("Request failed: %s", err.Error())
+		rw.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
+		return
+	}
+	data.Description = desc.String
+	renderMetadata(data, rw)
 }
 
 func generateMasterFileMetadata(mfPid string, data iiifData, rw http.ResponseWriter) {
