@@ -167,8 +167,8 @@ func generateBiblMetadata(data iiifData, rw http.ResponseWriter) {
 	// Get data for all master files from units associated with bibl
 	qs = `select m.pid, m.title, m.description, m.transcription_text, t.width, t.height from master_files m
 	      inner join units u on u.id=m.unit_id
-	      inner join image_tech_meta t on m.id=t.master_file_id where u.bibl_id = ?`
-	rows, _ := db.Query(qs, biblID)
+	      inner join image_tech_meta t on m.id=t.master_file_id where u.bibl_id = ? and u.include_in_dl = ?`
+	rows, _ := db.Query(qs, biblID, 1)
 	defer rows.Close()
 	for rows.Next() {
 		var mf masterFile
