@@ -19,7 +19,7 @@ import (
 var db *sql.DB // global variable to share it between main and the HTTP handler
 var logger *log.Logger
 
-const version = "1.2.0"
+const version = "1.2.1"
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
@@ -263,6 +263,7 @@ func generateItemMetadata(pid string, data iiifData, rw http.ResponseWriter) {
 
 func generateMasterFileMetadata(mfPid string, data iiifData, rw http.ResponseWriter) {
 	var desc sql.NullString
+	var mfTitle sql.NullString
 	var mfDesc sql.NullString
 	var mfDescMetadata sql.NullString
 	var mf masterFile
@@ -271,7 +272,7 @@ func generateMasterFileMetadata(mfPid string, data iiifData, rw http.ResponseWri
 	      inner join units u on u.id=m.unit_id
          inner join bibls b on u.bibl_id=b.id
 	      inner join image_tech_meta t on m.id=t.master_file_id where m.pid = ?`
-	err := db.QueryRow(qs, mfPid).Scan(&data.BiblPID, &data.Title, &desc, &mf.Title, &mfDesc, &mfDescMetadata, &mf.Width, &mf.Height)
+	err := db.QueryRow(qs, mfPid).Scan(&data.BiblPID, &data.Title, &desc, &mfTitle, &mfDesc, &mfDescMetadata, &mf.Width, &mf.Height)
 	if err != nil {
 		logger.Printf("Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusBadRequest)
@@ -279,9 +280,10 @@ func generateMasterFileMetadata(mfPid string, data iiifData, rw http.ResponseWri
 		return
 	}
 
-	// set descriptions if available
+	// set title and descriptions if available
 	data.Description = desc.String
 	mf.Description = mfDesc.String
+	mf.Title = mfTitle.String
 
 	// MODS desc metadata in record overrides title and desc
 	if mfDescMetadata.Valid {
