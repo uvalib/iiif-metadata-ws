@@ -3,18 +3,17 @@
    "@id":"{{.URL}}",
    "@type":"SC:Manifest",
    "label":"{{.Title}}",
-   "description":"{{.Description}}",
    "logo":"http://iiif.lib.virginia.edu/iiif/static:1/full/full/0/default.jpg",
    "sequences":[
       {
          "@type":"sc:Sequence",
          "canvases":[
-            {{- $biblPid := .BiblPID -}}
+            {{- $metadataPid := .MetadataPID -}}
             {{- $iiifUrl := .IiifURL -}}
             {{range $index, $element := .MasterFiles}}
             {{- if $index}},{{end}}
             {
-               "@id":"{{ $iiifUrl }}/dl/{{$biblPid}}/canvas/c{{$index}}",
+               "@id":"{{ $iiifUrl }}/dl/{{$metadataPid}}/canvas/c{{$index}}",
                "@type":"SC:Canvas",
                "label":"{{.Title}}",
                "description":"{{.Description}}",
@@ -42,7 +41,7 @@
                            "profile":"http://iiif.io/api/image/2/level1.json"
                         }
                      },
-                     "on":"{{$iiifUrl}}/dl/{{$biblPid}}/canvas/c{{$index}}"
+                     "on":"{{$iiifUrl}}/dl/{{$metadataPid}}/canvas/c{{$index}}"
                   }
                ]
             }
