@@ -256,7 +256,7 @@ func generateBiblMetadata(data iiifData, rw http.ResponseWriter) {
 func renderMetadata(data iiifData, rw http.ResponseWriter) {
 	rw.Header().Set("Access-Control-Allow-Origin", "*")
 	rw.Header().Set("content-type", "application/json; charset=utf-8")
-	tmpl, _ := template.ParseFiles("iiif.json")
+	tmpl, _ := template.ParseFiles(path.Join(path.Dir(os.Args[0]), "iiif.json"))
 	err := tmpl.ExecuteTemplate(rw, "iiif.json", data)
 	if err != nil {
 		logger.Printf("Unable to render IIIF metadata for %s: %s", data.BiblPID, err.Error())
