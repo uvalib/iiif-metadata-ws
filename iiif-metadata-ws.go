@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -55,6 +56,7 @@ func main() {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
 	viper.AddConfigPath(".")
+	viper.AddConfigPath(path.Dir(os.Args[0]))
 	err := viper.ReadInConfig()
 	if err != nil {
 		fmt.Printf("Unable to read config: %s", err.Error())
@@ -113,6 +115,10 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 	} else if pidType == "item" {
 		logger.Printf("%s is an item", pid)
 		generateItemMetadata(pid, data, rw)
+	} else if pidType == "component" {
+		logger.Printf("%s is a component", pid)
+		data.BiblPID = pid
+		generateComponentMetadata(data, rw)
 	} else {
 		logger.Printf("Couldn't find %s", pid)
 		rw.WriteHeader(http.StatusNotFound)
@@ -144,7 +150,64 @@ func determinePidType(pid string) (pidType string) {
 		return
 	}
 
+	qs = "select count(*) as cnt from components b where pid=?"
+	db.QueryRow(qs, pid).Scan(&cnt)
+	if cnt == 1 {
+		pidType = "component"
+		return
+	}
+
 	return
+}
+
+func generateComponentMetadata(data iiifData, rw http.ResponseWriter) {
+	var compID int
+	var label sql.NullString
+	var title sql.NullString
+
+	qs := "select c.id, c.title, c.label, c.content_desc from components c where pid=?"
+	err := db.QueryRow(qs, data.BiblPID).Scan(&compID, &title, &label, &data.Description)
+	if err != nil {
+		logger.Printf("Request failed: %s", err.Error())
+		rw.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
+		return
+	}
+
+	logger.Printf("BiblPID: %s, compID: %s\n title: %s, label: %s\n desc: %s", data.BiblPID, compID, title, label, data.Description)
+
+	data.Title = ""
+	if title.Valid == true {
+		data.Title = data.Title + title.String
+	} else if label.Valid == true {
+		data.Title = data.Title + label.String
+	} else {
+		data.Title = data.BiblPID
+	}
+
+	// Get data for all master files from units associated with bibl
+	qs = `select m.pid, m.title, m.description, m.transcription_text, t.width, t.height from master_files m
+	      inner join image_tech_meta t on m.id=t.master_file_id where m.component_id = ? `
+	rows, _ := db.Query(qs, compID)
+	defer rows.Close()
+	for rows.Next() {
+		var mf masterFile
+		var mfDesc sql.NullString
+		var mfTrans sql.NullString
+		err = rows.Scan(&mf.PID, &mf.Title, &mfDesc, &mfTrans, &mf.Width, &mf.Height)
+		if err != nil {
+			logger.Printf("Unable to retreive IIIF MasterFile metadata for %s: %s", data.BiblPID, err.Error())
+			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
+			return
+		}
+		mf.Description = mfDesc.String
+		if mfTrans.Valid {
+			mf.Transcription = strings.Replace(mfTrans.String, "\n", "\\n", -1)
+			mf.Transcription = strings.Replace(mf.Transcription, "\r", "", -1)
+		}
+		data.MasterFiles = append(data.MasterFiles, mf)
+	}
+	renderMetadata(data, rw)
 }
 
 func generateBiblMetadata(data iiifData, rw http.ResponseWriter) {
