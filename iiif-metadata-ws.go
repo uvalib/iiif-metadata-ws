@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -19,7 +20,7 @@ import (
 var db *sql.DB // global variable to share it between main and the HTTP handler
 var logger *log.Logger
 
-const version = "1.3.0"
+const version = "1.3.1"
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
@@ -35,6 +36,7 @@ type iiifData struct {
 	URL         string
 	MetadataPID string
 	Title       string
+	Exemplar    int
 	MasterFiles []masterFile
 }
 
@@ -148,13 +150,25 @@ func determinePidType(pid string) (pidType string) {
 
 func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 	var metadataID int
-	qs := "select b.id, b.title from metadata b where pid=?"
-	err := db.QueryRow(qs, data.MetadataPID).Scan(&metadataID, &data.Title)
+	var exemplar sql.NullString
+	qs := "select b.id, b.title, b.exemplar from metadata b where pid=?"
+	err := db.QueryRow(qs, data.MetadataPID).Scan(&metadataID, &data.Title, &exemplar)
 	if err != nil {
 		logger.Printf("Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
 		return
+	}
+
+	if exemplar.Valid {
+		end := strings.Split(exemplar.String, "_")[1]
+		numStr := strings.Split(end, ".")[0]
+		pgNum, numErr := strconv.Atoi(numStr)
+		if numErr == nil {
+			data.Exemplar = pgNum - 1
+			logger.Printf("Exemplar set to %d", data.Exemplar)
+
+		}
 	}
 
 	// Get data for all master files from units associated with the metadata record
