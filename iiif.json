@@ -6,7 +6,7 @@
    "logo":"http://iiif.lib.virginia.edu/iiif/static:1/full/full/0/default.jpg",
    "sequences":[
       {
-         "startCanvas": "{{ .IiifURL }}/dl/canvas/c{{.Exemplar}}",
+         "startCanvas": "{{ .IiifURL }}/dl/{{.MetadataPID}}/canvas/c{{.Exemplar}}",
          "@type":"sc:Sequence",
          "canvases":[
             {{- $metadataPid := .MetadataPID -}}
