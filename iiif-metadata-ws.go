@@ -20,7 +20,7 @@ import (
 var db *sql.DB // global variable to share it between main and the HTTP handler
 var logger *log.Logger
 
-const version = "1.3.1"
+const version = "1.3.2"
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
@@ -161,13 +161,16 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 	}
 
 	if exemplar.Valid {
-		end := strings.Split(exemplar.String, "_")[1]
-		numStr := strings.Split(end, ".")[0]
-		pgNum, numErr := strconv.Atoi(numStr)
-		if numErr == nil {
-			data.Exemplar = pgNum - 1
-			logger.Printf("Exemplar set to %d", data.Exemplar)
+		exemplarVal := exemplar.String
+		if len(exemplarVal) > 0 {
+			end := strings.Split(exemplar.String, "_")[1]
+			numStr := strings.Split(end, ".")[0]
+			pgNum, numErr := strconv.Atoi(numStr)
+			if numErr == nil {
+				data.Exemplar = pgNum - 1
+				logger.Printf("Exemplar set to %d", data.Exemplar)
 
+			}
 		}
 	}
 
