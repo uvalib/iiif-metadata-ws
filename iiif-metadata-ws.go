@@ -20,7 +20,7 @@ import (
 var db *sql.DB // global variable to share it between main and the HTTP handler
 var logger *log.Logger
 
-const version = "1.3.2"
+const version = "1.4.0"
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
@@ -108,9 +108,6 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 		logger.Printf("%s is a metadata record", pid)
 		data.MetadataPID = pid
 		generateFromMetadataRecord(data, rw)
-	} else if pidType == "master_file" {
-		logger.Printf("%s is a masterfile", pid)
-		generateFromMasterFile(pid, data, rw)
 	} else if pidType == "item" {
 		logger.Printf("%s is an item", pid)
 		generateFromItem(pid, data, rw)
@@ -131,13 +128,6 @@ func determinePidType(pid string) (pidType string) {
 		return
 	}
 
-	qs = "select count(*) as cnt from master_files b where pid=?"
-	db.QueryRow(qs, pid).Scan(&cnt)
-	if cnt == 1 {
-		pidType = "master_file"
-		return
-	}
-
 	qs = "select count(*) as cnt from items b where pid=?"
 	db.QueryRow(qs, pid).Scan(&cnt)
 	if cnt == 1 {
@@ -151,8 +141,10 @@ func determinePidType(pid string) (pidType string) {
 func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 	var metadataID int
 	var exemplar sql.NullString
-	qs := "select b.id, b.title, b.exemplar from metadata b where pid=?"
-	err := db.QueryRow(qs, data.MetadataPID).Scan(&metadataID, &data.Title, &exemplar)
+	var descMetadata sql.NullString
+	var metadataType string
+	qs := "select id, title, exemplar, type, desc_metadata from metadata where pid=?"
+	err := db.QueryRow(qs, data.MetadataPID).Scan(&metadataID, &data.Title, &exemplar, &metadataType, &descMetadata)
 	if err != nil {
 		logger.Printf("Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusBadRequest)
@@ -177,7 +169,7 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 	// Get data for all master files from units associated with the metadata record
 	qs = `select m.pid, m.title, m.description, m.transcription_text, t.width, t.height from master_files m
 	      inner join units u on u.id=m.unit_id
-	      inner join image_tech_meta t on m.id=t.master_file_id where u.metadata_id = ? and u.include_in_dl = ?`
+	      inner join image_tech_meta t on m.id=t.master_file_id where m.metadata_id = ? and u.include_in_dl = ?`
 	rows, _ := db.Query(qs, metadataID, 1)
 	defer rows.Close()
 	for rows.Next() {
@@ -195,22 +187,13 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 			mf.Transcription = strings.Replace(mfTrans.String, "\n", "\\n", -1)
 			mf.Transcription = strings.Replace(mf.Transcription, "\r", "", -1)
 		}
+		// If the metadata for this master file is XML, the MODS desc metadata in record overrides title and desc
+		if descMetadata.Valid && strings.Compare("XmlMetadata", metadataType) == 0 {
+			parseMods(&mf, descMetadata.String)
+		}
 		data.MasterFiles = append(data.MasterFiles, mf)
 	}
 	renderIiifMetadata(data, rw)
-}
-
-func renderIiifMetadata(data iiifData, rw http.ResponseWriter) {
-	rw.Header().Set("Access-Control-Allow-Origin", "*")
-	rw.Header().Set("content-type", "application/json; charset=utf-8")
-	tmpl, _ := template.ParseFiles("iiif.json")
-	err := tmpl.ExecuteTemplate(rw, "iiif.json", data)
-	if err != nil {
-		logger.Printf("Unable to render IIIF metadata for %s: %s", data.MetadataPID, err.Error())
-		fmt.Fprintf(rw, "Unable to render IIIF metadata: %s", err.Error())
-		return
-	}
-	logger.Printf("IIIF Metadata generated for %s", data.MetadataPID)
 }
 
 func generateFromItem(pid string, data iiifData, rw http.ResponseWriter) {
@@ -228,7 +211,8 @@ func generateFromItem(pid string, data iiifData, rw http.ResponseWriter) {
 	}
 
 	// Get data for all master files attached to this item
-	qs = `select m.pid, m.title, m.description, m.transcription_text, m.desc_metadata, t.width, t.height from master_files m
+	qs = `select m.pid, m.title, m.description, m.transcription_text, b.desc_metadata, t.width, t.height from master_files m
+         inner join metadata b on b.id = m.metadata_id
 	      inner join image_tech_meta t on m.id=t.master_file_id where m.item_id = ?`
 	rows, _ := db.Query(qs, itemID)
 	defer rows.Close()
@@ -269,36 +253,17 @@ func generateFromItem(pid string, data iiifData, rw http.ResponseWriter) {
 	renderIiifMetadata(data, rw)
 }
 
-func generateFromMasterFile(mfPid string, data iiifData, rw http.ResponseWriter) {
-	var mfTitle sql.NullString
-	var mfDesc sql.NullString
-	var mfDescMetadata sql.NullString
-	var mf masterFile
-	mf.PID = mfPid
-	qs := `select b.pid, b.title, m.title, m.description, m.desc_metadata, t.width, t.height from master_files m
-	      inner join units u on u.id=m.unit_id
-         inner join metadata b on u.metadata_id=b.id
-	      inner join image_tech_meta t on m.id=t.master_file_id where m.pid = ?`
-	err := db.QueryRow(qs, mfPid).Scan(&data.MetadataPID, &data.Title, &mfTitle, &mfDesc, &mfDescMetadata, &mf.Width, &mf.Height)
+func renderIiifMetadata(data iiifData, rw http.ResponseWriter) {
+	rw.Header().Set("Access-Control-Allow-Origin", "*")
+	rw.Header().Set("content-type", "application/json; charset=utf-8")
+	tmpl, _ := template.ParseFiles("iiif.json")
+	err := tmpl.ExecuteTemplate(rw, "iiif.json", data)
 	if err != nil {
-		logger.Printf("Request failed: %s", err.Error())
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
+		logger.Printf("Unable to render IIIF metadata for %s: %s", data.MetadataPID, err.Error())
+		fmt.Fprintf(rw, "Unable to render IIIF metadata: %s", err.Error())
 		return
 	}
-
-	// set title and descriptions if available
-	mf.Description = mfDesc.String
-	mf.Title = mfTitle.String
-
-	// MODS desc metadata in record overrides title and desc
-	if mfDescMetadata.Valid {
-		parseMods(&mf, mfDescMetadata.String)
-	}
-
-	data.MasterFiles = append(data.MasterFiles, mf)
-
-	renderIiifMetadata(data, rw)
+	logger.Printf("IIIF Metadata generated for %s", data.MetadataPID)
 }
 
 /**
