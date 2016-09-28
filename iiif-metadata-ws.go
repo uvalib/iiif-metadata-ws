@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -152,31 +151,19 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 		return
 	}
 
-	if exemplar.Valid {
-		exemplarVal := exemplar.String
-		if len(exemplarVal) > 0 {
-			end := strings.Split(exemplar.String, "_")[1]
-			numStr := strings.Split(end, ".")[0]
-			pgNum, numErr := strconv.Atoi(numStr)
-			if numErr == nil {
-				data.Exemplar = pgNum - 1
-				logger.Printf("Exemplar set to %d", data.Exemplar)
-
-			}
-		}
-	}
-
 	// Get data for all master files from units associated with the metadata record
-	qs = `select m.pid, m.title, m.description, m.transcription_text, t.width, t.height from master_files m
+	qs = `select m.pid, m.filename, m.title, m.description, m.transcription_text, t.width, t.height from master_files m
 	      inner join units u on u.id=m.unit_id
 	      inner join image_tech_meta t on m.id=t.master_file_id where m.metadata_id = ? and u.include_in_dl = ?`
 	rows, _ := db.Query(qs, metadataID, 1)
 	defer rows.Close()
+	pgNum := 0
 	for rows.Next() {
 		var mf masterFile
+		var mfFilename string
 		var mfDesc sql.NullString
 		var mfTrans sql.NullString
-		err = rows.Scan(&mf.PID, &mf.Title, &mfDesc, &mfTrans, &mf.Width, &mf.Height)
+		err = rows.Scan(&mf.PID, &mfFilename, &mf.Title, &mfDesc, &mfTrans, &mf.Width, &mf.Height)
 		if err != nil {
 			logger.Printf("Unable to retreive IIIF MasterFile metadata for %s: %s", data.MetadataPID, err.Error())
 			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
@@ -192,6 +179,14 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 			parseMods(&mf, descMetadata.String)
 		}
 		data.MasterFiles = append(data.MasterFiles, mf)
+
+		// if exemplar is set, see if it matches the current master file filename
+		// if it does, set the current page num as the start canvas
+		if exemplar.Valid && strings.Compare(mfFilename, exemplar.String) == 0 {
+			data.Exemplar = pgNum
+			logger.Printf("Exemplar set to filename %s, page %d", mfFilename, data.Exemplar)
+		}
+		pgNum++
 	}
 	renderIiifMetadata(data, rw)
 }
