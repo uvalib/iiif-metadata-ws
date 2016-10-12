@@ -20,7 +20,7 @@ import (
 var db *sql.DB // global variable to share it between main and the HTTP handler
 var logger *log.Logger
 
-const version = "1.4.0"
+const version = "1.4.1"
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
@@ -250,7 +250,7 @@ func generateFromItem(pid string, data iiifData, rw http.ResponseWriter) {
 }
 
 func renderIiifMetadata(data iiifData, rw http.ResponseWriter) {
-	rw.Header().Set("content-type", "application/json; charset=utf-8")
+	// rw.Header().Set("content-type", "application/json; charset=utf-8")
 	tmpl, _ := template.ParseFiles("iiif.json")
 	err := tmpl.ExecuteTemplate(rw, "iiif.json", data)
 	if err != nil {
