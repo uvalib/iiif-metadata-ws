@@ -20,7 +20,7 @@ import (
 var db *sql.DB // global variable to share it between main and the HTTP handler
 var logger *log.Logger
 
-const version = "1.4.1"
+const version = "1.4.0"
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
@@ -79,7 +79,14 @@ func main() {
 	mux.GET("/:pid/manifest.json", iiifHandler)
 	mux.GET("/:pid", iiifHandler)
 	logger.Printf("Start service on port %s", viper.GetString("port"))
-	http.ListenAndServe(":"+viper.GetString("port"), cors.Default().Handler(mux))
+
+        if viper.GetBool("https") == true {
+        	crt := viper.GetString("ssl_crt")
+        	key := viper.GetString("ssl_key")
+		log.Fatal(http.ListenAndServeTLS(":"+viper.GetString("port"), crt, key, cors.Default().Handler(mux)))
+	} else {
+		log.Fatal(http.ListenAndServe(":"+viper.GetString("port"), cors.Default().Handler(mux)))
+	}
 }
 
 /**

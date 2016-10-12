@@ -5,3 +5,6 @@ db_name: tracksys3_development
 db_host: localhost:3306
 db_old_passwords: false
 iiif_url: http://iiif.lib.virginia.edu/iiif  
+https: true
+ssl_crt: cert.pem 
+ssl_key: key.pem
