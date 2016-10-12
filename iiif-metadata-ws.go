@@ -13,6 +13,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/lestrrat/go-libxml2"
 	"github.com/lestrrat/go-libxml2/xpath"
+	"github.com/rs/cors"
 	"github.com/spf13/viper"
 )
 
@@ -78,7 +79,7 @@ func main() {
 	mux.GET("/:pid/manifest.json", iiifHandler)
 	mux.GET("/:pid", iiifHandler)
 	logger.Printf("Start service on port %s", viper.GetString("port"))
-	http.ListenAndServe(":"+viper.GetString("port"), mux)
+	http.ListenAndServe(":"+viper.GetString("port"), cors.Default().Handler(mux))
 }
 
 /**
@@ -249,7 +250,6 @@ func generateFromItem(pid string, data iiifData, rw http.ResponseWriter) {
 }
 
 func renderIiifMetadata(data iiifData, rw http.ResponseWriter) {
-	rw.Header().Set("Access-Control-Allow-Origin", "*")
 	rw.Header().Set("content-type", "application/json; charset=utf-8")
 	tmpl, _ := template.ParseFiles("iiif.json")
 	err := tmpl.ExecuteTemplate(rw, "iiif.json", data)
