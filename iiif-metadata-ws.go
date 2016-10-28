@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -181,8 +182,9 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 		mf.Description = mfDesc.String
 		mf.Title = mfTitle.String
 		if mfTrans.Valid {
-			mf.Transcription = strings.Replace(mfTrans.String, "\n", "\\n", -1)
-			mf.Transcription = strings.Replace(mf.Transcription, "\r", "", -1)
+			safe, _ := json.Marshal(mfTrans.String)
+			encodedStr := string(safe)
+			mf.Transcription = encodedStr[1 : len(encodedStr)-1]
 		}
 		// If the metadata for this master file is XML, the MODS desc metadata in record overrides title and desc
 		if descMetadata.Valid && strings.Compare("XmlMetadata", metadataType) == 0 {
@@ -236,8 +238,9 @@ func generateFromItem(pid string, data iiifData, rw http.ResponseWriter) {
 		mf.Description = mfDesc.String
 		mf.Title = mfTitle.String
 		if mfTrans.Valid {
-			mf.Transcription = strings.Replace(mfTrans.String, "\n", "\\n", -1)
-			mf.Transcription = strings.Replace(mf.Transcription, "\r", "", -1)
+			safe, _ := json.Marshal(mfTrans.String)
+			encodedStr := string(safe)
+			mf.Transcription = encodedStr[1 : len(encodedStr)-1]
 		}
 		// MODS desc metadata in record overrides title and desc
 		if mfDescMetadata.Valid {
