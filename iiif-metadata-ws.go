@@ -182,6 +182,7 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 		mf.Title = mfTitle.String
 		if mfTrans.Valid {
 			safe := strings.Replace(mfTrans.String, "\n", " ", -1)
+			safe = strings.Replace(safe, "\\", "\\\\", -1)
 			mf.Transcription = safe
 		}
 		// If the metadata for this master file is XML, the MODS desc metadata in record overrides title and desc
@@ -237,6 +238,7 @@ func generateFromItem(pid string, data iiifData, rw http.ResponseWriter) {
 		mf.Title = mfTitle.String
 		if mfTrans.Valid {
 			safe := strings.Replace(mfTrans.String, "\n", " ", -1)
+			safe = strings.Replace(safe, "\\", "\\\\", -1)
 			mf.Transcription = safe
 		}
 		// MODS desc metadata in record overrides title and desc
