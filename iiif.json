@@ -6,18 +6,22 @@
    "logo":"http://iiif.lib.virginia.edu/iiif/static:1/full/full/0/default.jpg",
    "sequences":[
       {
-         "startCanvas": "{{ .IiifURL }}/dl/{{.MetadataPID}}/canvas/c{{.Exemplar}}",
+         "startCanvas": "{{.IiifURL }}/dl/{{.MetadataPID}}/canvas/c{{.Exemplar}}",
          "@type":"sc:Sequence",
          "canvases":[
             {{- $metadataPid := .MetadataPID -}}
             {{- $iiifUrl := .IiifURL -}}
-            {{range $index, $element := .MasterFiles}}
-            {{- if $index}},{{end}}
+            {{- range $index, $element := .MasterFiles -}}
+            {{- if $index}},{{end -}}
             {
                "@id":"{{ $iiifUrl }}/dl/{{$metadataPid}}/canvas/c{{$index}}",
                "@type":"SC:Canvas",
+               {{- if .Title}}
                "label":"{{.Title}}",
+               {{- end}}
+               {{- if .Description}}
                "description":"{{.Description}}",
+               {{- end}}
                "thumbnail":"{{ $iiifUrl }}/{{.PID}}/full/90,146/0/default.jpg",
                "width": {{.Width}},
                "height": {{.Height}},

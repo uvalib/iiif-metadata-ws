@@ -63,12 +63,17 @@ func main() {
 	}
 
 	// Init DB connection
-	logger.Printf("Init DB connection...")
+	logger.Printf("Init DB connection to %s...", viper.GetString("db_host"))
 	connectStr := fmt.Sprintf("%s:%s@tcp(%s)/%s?allowOldPasswords=%s", viper.GetString("db_user"), viper.GetString("db_pass"),
 		viper.GetString("db_host"), viper.GetString("db_name"), viper.GetString("db_old_passwords"))
 	db, err = sql.Open("mysql", connectStr)
 	if err != nil {
 		fmt.Printf("Database connection failed: %s", err.Error())
+		os.Exit(1)
+	}
+	_, err = db.Query("SELECT 1")
+	if err != nil {
+		fmt.Printf("Database query failed: %s", err.Error())
 		os.Exit(1)
 	}
 	defer db.Close()
@@ -118,6 +123,10 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 	} else if pidType == "item" {
 		logger.Printf("%s is an item", pid)
 		generateFromItem(pid, data, rw)
+	} else if pidType == "component" {
+		logger.Printf("%s is a component", pid)
+		data.MetadataPID = pid
+		generateFromComponent(pid, data, rw)
 	} else {
 		logger.Printf("Couldn't find %s", pid)
 		rw.WriteHeader(http.StatusNotFound)
@@ -141,7 +150,13 @@ func determinePidType(pid string) (pidType string) {
 		pidType = "item"
 		return
 	}
-
+	
+	qs = "select count(*) as cnt from components b where pid=?"
+	db.QueryRow(qs, pid).Scan(&cnt)
+	if cnt == 1 {
+		pidType = "component"
+		return
+	}
 	return
 }
 
@@ -262,9 +277,69 @@ func generateFromItem(pid string, data iiifData, rw http.ResponseWriter) {
 	renderIiifMetadata(data, rw)
 }
 
+
+func generateFromComponent(pid string, data iiifData, rw http.ResponseWriter) {
+	// grab all of the masterfiles hooked to this component
+	var componentID int
+	var exemplar sql.NullString
+	qs := `select id, title, exemplar from components where pid=?`
+	err := db.QueryRow(qs, pid).Scan(&componentID, &data.Title, &exemplar)
+	if err != nil {
+		logger.Printf("Request failed: %s", err.Error())
+		rw.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
+		return
+	}
+
+	// Get data for all master files attached to this component
+	pgNum := 0
+	qs = `select m.pid, m.filename, m.title, m.description, m.transcription_text, b.desc_metadata, t.width, t.height from master_files m
+         inner join metadata b on b.id = m.metadata_id
+	      inner join image_tech_meta t on m.id=t.master_file_id where m.component_id = ?`
+	rows, _ := db.Query(qs, componentID)
+	defer rows.Close()
+	for rows.Next() {
+		var mf masterFile
+		var mfFilename string
+		var mfTitle sql.NullString
+		var mfDesc sql.NullString
+		var mfTrans sql.NullString
+		var mfDescMetadata sql.NullString
+		err = rows.Scan(&mf.PID, &mfFilename, &mfTitle, &mfDesc, &mfTrans, &mfDescMetadata, &mf.Width, &mf.Height)
+		if err != nil {
+			logger.Printf("Unable to retreive IIIF MasterFile metadata for %s: %s", data.MetadataPID, err.Error())
+			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
+			return
+		}
+		mf.Description = mfDesc.String
+		mf.Title = mfTitle.String
+		if mfTrans.Valid {
+			safe := strings.Replace(mfTrans.String, "\n", " ", -1)
+			safe = strings.Replace(safe, "\\", "\\\\", -1)
+			mf.Transcription = safe
+		}
+		// MODS desc metadata in record overrides title and desc
+		if mfDescMetadata.Valid {
+			parseMods(&mf, mfDescMetadata.String)
+		}
+		
+		data.MasterFiles = append(data.MasterFiles, mf)
+
+		// if exemplar is set, see if it matches the current master file filename
+		// if it does, set the current page num as the start canvas
+		if exemplar.Valid && strings.Compare(mfFilename, exemplar.String) == 0 {
+			data.Exemplar = pgNum
+			logger.Printf("Exemplar set to filename %s, page %d", mfFilename, data.Exemplar)
+		}
+		pgNum++
+
+	}
+	renderIiifMetadata(data, rw)
+}
+
 func renderIiifMetadata(data iiifData, rw http.ResponseWriter) {
 	// rw.Header().Set("content-type", "application/json; charset=utf-8")
-	tmpl, _ := template.ParseFiles("iiif.json")
+	tmpl := template.Must(template.ParseFiles("iiif.json"))
 	err := tmpl.ExecuteTemplate(rw, "iiif.json", data)
 	if err != nil {
 		logger.Printf("Unable to render IIIF metadata for %s: %s", data.MetadataPID, err.Error())
