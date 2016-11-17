@@ -122,6 +122,7 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 		generateFromMetadataRecord(data, rw)
 	} else if pidType == "item" {
 		logger.Printf("%s is an item", pid)
+		data.MetadataPID = pid
 		generateFromItem(pid, data, rw)
 	} else if pidType == "component" {
 		logger.Printf("%s is a component", pid)
