@@ -1,6 +1,7 @@
 package main
 
 import (
+
 	"database/sql"
 	"fmt"
 	"html/template"
@@ -161,6 +162,13 @@ func determinePidType(pid string) (pidType string) {
 	return
 }
 
+func cleanString(str string) string {
+	safe := strings.Replace(str, "\n", " ", -1)    /* escape for json */
+	safe = strings.Replace(safe, "\\", "\\\\", -1) /* escape for json */
+	safe = strings.Replace(safe, "\x0C", "", -1)   /* illegal in XML */
+	return safe
+}
+
 func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 	var metadataID int
 	var exemplar sql.NullString
@@ -197,9 +205,7 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 		mf.Description = mfDesc.String
 		mf.Title = mfTitle.String
 		if mfTrans.Valid {
-			safe := strings.Replace(mfTrans.String, "\n", " ", -1)
-			safe = strings.Replace(safe, "\\", "\\\\", -1)
-			mf.Transcription = safe
+			mf.Transcription = cleanString(mfTrans.String)
 		}
 		// If the metadata for this master file is XML, the MODS desc metadata in record overrides title and desc
 		if descMetadata.Valid && strings.Compare("XmlMetadata", metadataType) == 0 {
@@ -253,9 +259,7 @@ func generateFromItem(pid string, data iiifData, rw http.ResponseWriter) {
 		mf.Description = mfDesc.String
 		mf.Title = mfTitle.String
 		if mfTrans.Valid {
-			safe := strings.Replace(mfTrans.String, "\n", " ", -1)
-			safe = strings.Replace(safe, "\\", "\\\\", -1)
-			mf.Transcription = safe
+			mf.Transcription = cleanString(mfTrans.String)
 		}
 		// MODS desc metadata in record overrides title and desc
 		if mfDescMetadata.Valid {
@@ -315,9 +319,7 @@ func generateFromComponent(pid string, data iiifData, rw http.ResponseWriter) {
 		mf.Description = mfDesc.String
 		mf.Title = mfTitle.String
 		if mfTrans.Valid {
-			safe := strings.Replace(mfTrans.String, "\n", " ", -1)
-			safe = strings.Replace(safe, "\\", "\\\\", -1)
-			mf.Transcription = safe
+			mf.Transcription = cleanString(mfTrans.String)
 		}
 		// MODS desc metadata in record overrides title and desc
 		if mfDescMetadata.Valid {
