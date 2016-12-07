@@ -21,7 +21,7 @@ import (
 var db *sql.DB // global variable to share it between main and the HTTP handler
 var logger *log.Logger
 
-const version = "1.4.1"
+const version = "1.4.2"
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
