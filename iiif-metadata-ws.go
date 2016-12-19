@@ -20,7 +20,7 @@ import (
 var db *sql.DB // global variable to share it between main and the HTTP handler
 var logger *log.Logger
 
-const version = "1.4.3"
+const version = "1.4.4"
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
@@ -177,7 +177,7 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 	// Get data for all master files from units associated with the metadata record
 	qs = `select m.pid, m.filename, m.title, m.description, t.width, t.height from master_files m
 	      inner join units u on u.id=m.unit_id
-	      inner join image_tech_meta t on m.id=t.master_file_id where m.metadata_id = ? and u.include_in_dl = ?`
+	      inner join image_tech_meta t on m.id=t.master_file_id where m.metadata_id = ? and u.include_in_dl = ? order by m.filename asc`
 	rows, _ := db.Query(qs, metadataID, 1)
 	defer rows.Close()
 	pgNum := 0
@@ -229,7 +229,7 @@ func generateFromItem(pid string, data iiifData, rw http.ResponseWriter) {
 	// Get data for all master files attached to this item
 	qs = `select m.pid, m.title, m.description, b.desc_metadata, t.width, t.height from master_files m
          inner join metadata b on b.id = m.metadata_id
-	      inner join image_tech_meta t on m.id=t.master_file_id where m.item_id = ?`
+	      inner join image_tech_meta t on m.id=t.master_file_id where m.item_id = ? order by m.filename asc`
 	rows, _ := db.Query(qs, itemID)
 	defer rows.Close()
 	for rows.Next() {
@@ -284,7 +284,7 @@ func generateFromComponent(pid string, data iiifData, rw http.ResponseWriter) {
 	pgNum := 0
 	qs = `select m.pid, m.filename, m.title, m.description, b.desc_metadata, t.width, t.height from master_files m
          inner join metadata b on b.id = m.metadata_id
-	      inner join image_tech_meta t on m.id=t.master_file_id where m.component_id = ?`
+	      inner join image_tech_meta t on m.id=t.master_file_id where m.component_id = ? order by m.filename asc`
 	rows, _ := db.Query(qs, componentID)
 	defer rows.Close()
 	for rows.Next() {
