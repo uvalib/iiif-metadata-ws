@@ -20,7 +20,7 @@ import (
 var db *sql.DB // global variable to share it between main and the HTTP handler
 var logger *log.Logger
 
-const version = "1.4.4"
+const version = "1.5.0"
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
@@ -119,10 +119,6 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 		logger.Printf("%s is a metadata record", pid)
 		data.MetadataPID = pid
 		generateFromMetadataRecord(data, rw)
-	} else if pidType == "item" {
-		logger.Printf("%s is an item", pid)
-		data.MetadataPID = pid
-		generateFromItem(pid, data, rw)
 	} else if pidType == "component" {
 		logger.Printf("%s is a component", pid)
 		data.MetadataPID = pid
@@ -141,13 +137,6 @@ func determinePidType(pid string) (pidType string) {
 	db.QueryRow(qs, pid).Scan(&cnt)
 	if cnt == 1 {
 		pidType = "metadata"
-		return
-	}
-
-	qs = "select count(*) as cnt from items b where pid=?"
-	db.QueryRow(qs, pid).Scan(&cnt)
-	if cnt == 1 {
-		pidType = "item"
 		return
 	}
 
@@ -208,61 +197,6 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 			logger.Printf("Exemplar set to filename %s, page %d", mfFilename, data.Exemplar)
 		}
 		pgNum++
-	}
-	renderIiifMetadata(data, rw)
-}
-
-func generateFromItem(pid string, data iiifData, rw http.ResponseWriter) {
-	// grab all of the masterfiles hooked to this item
-	var extURI sql.NullString
-	var unitID int
-	var itemID int
-	qs := `select id, external_uri, unit_id from items where pid=?`
-	err := db.QueryRow(qs, pid).Scan(&itemID, &extURI, &unitID)
-	if err != nil {
-		logger.Printf("Request failed: %s", err.Error())
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
-		return
-	}
-
-	// Get data for all master files attached to this item
-	qs = `select m.pid, m.title, m.description, b.desc_metadata, t.width, t.height from master_files m
-         inner join metadata b on b.id = m.metadata_id
-	      inner join image_tech_meta t on m.id=t.master_file_id where m.item_id = ? order by m.filename asc`
-	rows, _ := db.Query(qs, itemID)
-	defer rows.Close()
-	for rows.Next() {
-		var mf masterFile
-		var mfTitle sql.NullString
-		var mfDesc sql.NullString
-		var mfDescMetadata sql.NullString
-		err = rows.Scan(&mf.PID, &mfTitle, &mfDesc, &mfDescMetadata, &mf.Width, &mf.Height)
-		if err != nil {
-			logger.Printf("Unable to retreive IIIF MasterFile metadata for %s: %s", data.MetadataPID, err.Error())
-			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
-			return
-		}
-		mf.Description = mfDesc.String
-		mf.Title = mfTitle.String
-
-		// MODS desc metadata in record overrides title and desc
-		if mfDescMetadata.Valid {
-			parseMods(&mf, mfDescMetadata.String)
-		}
-		data.MasterFiles = append(data.MasterFiles, mf)
-	}
-
-	// TODO when extURI is populated, go scrape external system for metadata
-	// since this will be blank for some time, it is being ignored and metadata is pulled
-
-	qs = `select b.title from units u inner join metadata b on u.metadata_id=b.id where u.id=?`
-	err = db.QueryRow(qs, unitID).Scan(&data.Title)
-	if err != nil {
-		logger.Printf("Request failed: %s", err.Error())
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
-		return
 	}
 	renderIiifMetadata(data, rw)
 }
