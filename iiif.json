@@ -22,7 +22,7 @@
                {{- if .Description}}
                "description":"{{.Description}}",
                {{- end}}
-               "thumbnail":"{{ $iiifUrl }}/{{.PID}}/full/90,146/0/default.jpg",
+               "thumbnail":"{{ $iiifUrl }}/{{.PID}}/full/!200,200/0/default.jpg",
                "width": {{.Width}},
                "height": {{.Height}},
                "images":[
