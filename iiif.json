@@ -1,7 +1,7 @@
 {
    "@context":"http://iiif.io/api/presentation/2/context.json",
    "@id":"{{.URL}}",
-   "@type":"SC:Manifest",
+   "@type":"sc:Manifest",
    "label":"{{.Title}}",
    "logo":"http://iiif.lib.virginia.edu/iiif/static:1/full/full/0/default.jpg",
    "sequences":[
@@ -15,7 +15,7 @@
             {{- if $index}},{{end -}}
             {
                "@id":"{{ $iiifUrl }}/dl/{{$metadataPid}}/canvas/c{{$index}}",
-               "@type":"SC:Canvas",
+               "@type":"sc:Canvas",
                {{- if .Title}}
                "label":"{{.Title}}",
                {{- end}}
