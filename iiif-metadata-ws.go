@@ -20,7 +20,7 @@ import (
 var db *sql.DB // global variable to share it between main and the HTTP handler
 var logger *log.Logger
 
-const version = "1.5.0"
+const version = "1.5.1"
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
@@ -205,14 +205,16 @@ func generateFromComponent(pid string, data iiifData, rw http.ResponseWriter) {
 	// grab all of the masterfiles hooked to this component
 	var componentID int
 	var exemplar sql.NullString
+	var cTitle sql.NullString
 	qs := `select id, title, exemplar from components where pid=?`
-	err := db.QueryRow(qs, pid).Scan(&componentID, &data.Title, &exemplar)
+	err := db.QueryRow(qs, pid).Scan(&componentID, &cTitle, &exemplar)
 	if err != nil {
 		logger.Printf("Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
 		return
 	}
+	data.Title = cTitle.String
 
 	// Get data for all master files attached to this component
 	pgNum := 0
