@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"html/template"
@@ -17,10 +18,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-var db *sql.DB // global variable to share it between main and the HTTP handler
-var logger *log.Logger
+const version = "1.6.0"
 
-const version = "1.5.1"
+// globals to share between main and the HTTP handler
+var db *sql.DB
+var logger *log.Logger
 
 // Types used to generate the JSON response; masterFile and iiifData
 type masterFile struct {
@@ -30,12 +32,23 @@ type masterFile struct {
 	Width       int
 	Height      int
 }
+
 type iiifData struct {
+	VirgoURL    string
 	IiifURL     string
 	URL         string
+	VirgoKey    string
 	MetadataPID string
 	Title       string
-	Exemplar    int
+	Author      string
+	Description string
+	Date        string
+	Format      string
+	CallNumber  string
+	StartPage   int
+	ExemplarPID string
+	License     string
+	Related     string
 	MasterFiles []masterFile
 }
 
@@ -43,11 +56,11 @@ type iiifData struct {
  * Main entry point for the web service
  */
 func main() {
-	lf, _ := os.OpenFile("service.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
-	defer lf.Close()
-	logger = log.New(lf, "service: ", log.LstdFlags)
+	// lf, _ := os.OpenFile("service.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	// defer lf.Close()
+	// logger = log.New(lf, "service: ", log.LstdFlags)
 	// use below to log to console....
-	// logger = log.New(os.Stdout, "logger: ", log.LstdFlags)
+	logger = log.New(os.Stdout, "logger: ", log.LstdFlags)
 
 	// Load cfg
 	logger.Printf("===> iiif-metadata-ws staring up <===")
@@ -112,6 +125,7 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 	var data iiifData
 	data.URL = fmt.Sprintf("http://%s%s", req.Host, req.URL)
 	data.IiifURL = viper.GetString("iiif_url")
+	data.VirgoURL = viper.GetString("virgo_url")
 
 	// handle different types of PID
 	pidType := determinePidType(pid)
@@ -153,15 +167,30 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 	var metadataID int
 	var exemplar sql.NullString
 	var descMetadata sql.NullString
+	var author sql.NullString
 	var metadataType string
-	qs := "select id, title, exemplar, type, desc_metadata from metadata where pid=?"
-	err := db.QueryRow(qs, data.MetadataPID).Scan(&metadataID, &data.Title, &exemplar, &metadataType, &descMetadata)
+	var catalogKey sql.NullString
+	var callNumber sql.NullString
+
+	qs := `select m.id, m.title, creator_name, catalog_key, call_number, exemplar, type, desc_metadata, u.uri from metadata m
+          inner join use_rights u on u.id = use_right_id where pid=?`
+	err := db.QueryRow(qs, data.MetadataPID).Scan(
+		&metadataID, &data.Title, &author, &catalogKey, &callNumber, &exemplar, &metadataType, &descMetadata, &data.License)
 	if err != nil {
 		logger.Printf("Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
 		return
 	}
+
+	data.Author = author.String
+	data.CallNumber = callNumber.String
+	if catalogKey.Valid {
+		data.VirgoKey = catalogKey.String
+	} else {
+		data.VirgoKey = data.MetadataPID
+	}
+	parseSolrRecord(&data)
 
 	// Get data for all master files from units associated with the metadata record
 	qs = `select m.pid, m.filename, m.title, m.description, t.width, t.height from master_files m
@@ -193,8 +222,9 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 		// if exemplar is set, see if it matches the current master file filename
 		// if it does, set the current page num as the start canvas
 		if exemplar.Valid && strings.Compare(mfFilename, exemplar.String) == 0 {
-			data.Exemplar = pgNum
-			logger.Printf("Exemplar set to filename %s, page %d", mfFilename, data.Exemplar)
+			data.StartPage = pgNum
+			data.ExemplarPID = mf.PID
+			logger.Printf("Exemplar set to filename %s, page %d", mfFilename, data.StartPage)
 		}
 		pgNum++
 	}
@@ -248,8 +278,9 @@ func generateFromComponent(pid string, data iiifData, rw http.ResponseWriter) {
 		// if exemplar is set, see if it matches the current master file filename
 		// if it does, set the current page num as the start canvas
 		if exemplar.Valid && strings.Compare(mfFilename, exemplar.String) == 0 {
-			data.Exemplar = pgNum
-			logger.Printf("Exemplar set to filename %s, page %d", mfFilename, data.Exemplar)
+			data.StartPage = pgNum
+			data.ExemplarPID = mf.PID
+			logger.Printf("Exemplar set to filename %s, page %d", mfFilename, data.StartPage)
 		}
 		pgNum++
 
@@ -270,9 +301,98 @@ func renderIiifMetadata(data iiifData, rw http.ResponseWriter) {
 }
 
 /**
+ * Parse XML solr index for format_facet and published_display (sirsi) or year_display (xml)
+ */
+func parseSolrRecord(data *iiifData) {
+	// request index record from solr...
+	url := fmt.Sprintf("%s/select?q=id:%s", viper.GetString("virgo_solr_url"), data.VirgoKey)
+	resp, err := http.Get(url)
+	if err != nil {
+		logger.Printf("Unable to get Solr index: %s", err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	// parse the XML response into a document
+	doc, err := libxml2.ParseReader(resp.Body)
+	if err != nil {
+		logger.Printf("Unable to parse Solr index: %s", err.Error())
+		return
+	}
+	defer doc.Free()
+
+	root, err := doc.DocumentElement()
+	if err != nil {
+		logger.Printf("Failed to fetch Solr document element: %s", err.Error())
+		return
+	}
+
+	ctx, err := xpath.NewContext(root)
+	if err != nil {
+		logger.Printf("Failed to create Solr xpath context: %s", err.Error())
+		return
+	}
+	defer ctx.Free()
+
+	// Query for the data; format_facet. This has a bunch of <str> children that
+	// need to be combined to make the final format string. Skip 'Online'
+	nodes := xpath.NodeList(ctx.Find("//arr[@name='format_facet']/str"))
+	var buffer bytes.Buffer
+	for i := 0; i < len(nodes); i++ {
+		val := nodes[i].NodeValue()
+		if strings.Compare("Online", val) != 0 {
+			if buffer.Len() > 0 {
+				buffer.WriteString("; ")
+			}
+			buffer.WriteString(val)
+		}
+	}
+	data.Format = buffer.String()
+
+	// See if there is MARC data to parse for physical description
+	marc := xpath.String(ctx.Find("//str[@name='marc_display']"))
+	if len(marc) > 0 {
+		parseMarc(data, marc)
+	}
+
+	// Try published_date_display (for sirsi records)
+	date := xpath.String(ctx.Find("//arr[@name='published_date_display']/str"))
+	if len(date) > 0 {
+		data.Date = date
+		return
+	}
+
+	// .. not found, try year_display (for XML records)
+	date = xpath.String(ctx.Find("arr[@name='year_display']/str"))
+	if len(date) > 0 {
+		data.Date = date
+	}
+}
+
+func parseMarc(data *iiifData, marc string) {
+	doc, _ := libxml2.ParseString(marc)
+	root, _ := doc.DocumentElement()
+	ctx, _ := xpath.NewContext(root)
+	defer doc.Free()
+	defer ctx.Free()
+	ctx.RegisterNS("ns", "http://www.loc.gov/MARC21/slim")
+
+	nodes := xpath.NodeList(ctx.Find("//ns:datafield[@tag='300']/ns:subfield"))
+	var buffer bytes.Buffer
+	for i := 0; i < len(nodes); i++ {
+		val := nodes[i].NodeValue()
+		if buffer.Len() > 0 {
+			buffer.WriteString(" ")
+		}
+		buffer.WriteString(val)
+	}
+	data.Description = buffer.String()
+}
+
+/**
  * Parse title and description from MODS string
  */
-func parseMods(data *masterFile, mods string) {
+func parseMods(mfData *masterFile, mods string) {
 	doc, err := libxml2.ParseString(mods)
 	if err != nil {
 		logger.Printf("Unable to parse MODS: %s; just using data from DB", err.Error())
@@ -299,19 +419,19 @@ func parseMods(data *masterFile, mods string) {
 	}
 	title := xpath.String(ctx.Find("/ns:mods/ns:titleInfo/ns:title/text()"))
 	if len(title) > 0 {
-		data.Title = title
+		mfData.Title = title
 	}
 
 	// first try <abstract displayLabel="Description">
 	desc := xpath.String(ctx.Find("//ns:abstract[@displayLabel='Description']/text()"))
 	if len(desc) > 0 {
-		data.Description = desc
+		mfData.Description = desc
 		return
 	}
 
 	// .. next try for a provenance note
 	desc = xpath.String(ctx.Find("//ns:note[@type='provenance' and @displayLabel='staff']/text()"))
 	if len(desc) > 0 {
-		data.Description = fmt.Sprintf("Staff note: %s", desc)
+		mfData.Description = fmt.Sprintf("Staff note: %s", desc)
 	}
 }

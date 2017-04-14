@@ -2,11 +2,37 @@
    "@context":"http://iiif.io/api/presentation/2/context.json",
    "@id":"{{.URL}}",
    "@type":"sc:Manifest",
+   {{- if .ExemplarPID}}
+   "thumbnail":"{{ .IiifURL }}/{{.ExemplarPID}}/full/!200,200/0/default.jpg",
+   {{- end}}
    "label":"{{.Title}}",
+   {{- if .Description}}
+   "description":"{{.Description}}",
+   {{- end}}
+   "metadata": [
+      {{- if .Author}}
+      {"label":"Creator", "value":"{{.Author}}"}
+      {{- end}}
+      {{- if .CallNumber}}
+      {"label":"Call Number", "value":"{{.CallNumber}}"}
+      {{- end}}
+      {{- if .Format}}
+      {"label":"Format", "value":"{{.Format}}"}
+      {{- end}}
+      {{- if .Date}}
+      {"label":"Date", "value":"{{.Date}}"}
+      {{- end}}
+      {{- if .Description}}
+      {"label":"Physical Description", "value":"{{.Description}}"}
+      {{- end}}
+   ],
+   "license":"{{.License}}",
+   "attribution":"Provided by the University of Virginia Library",
    "logo":"http://iiif.lib.virginia.edu/iiif/static:1/full/full/0/default.jpg",
+   "related":"{{.VirgoURL}}/{{.VirgoKey}}",
    "sequences":[
       {
-         "startCanvas": "{{.IiifURL }}/dl/{{.MetadataPID}}/canvas/c{{.Exemplar}}",
+         "startCanvas": "{{.IiifURL }}/dl/{{.MetadataPID}}/canvas/c{{.StartPage}}",
          "@type":"sc:Sequence",
          "canvases":[
             {{- $metadataPid := .MetadataPID -}}
