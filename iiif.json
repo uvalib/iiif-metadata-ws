@@ -11,16 +11,16 @@
    {{- end}}
    "metadata": [
       {{- if .Author}}
-      {"label":"Creator", "value":"{{.Author}}"}
+      {"label":"Creator", "value":"{{.Author}}"}{{- if .CallNumber}},{{- end}}
       {{- end}}
       {{- if .CallNumber}}
-      {"label":"Call Number", "value":"{{.CallNumber}}"}
+      {"label":"Call Number", "value":"{{.CallNumber}}"}{{- if .Format}},{{- end}}
       {{- end}}
       {{- if .Format}}
-      {"label":"Format", "value":"{{.Format}}"}
+      {"label":"Format", "value":"{{.Format}}"}{{- if .Date}},{{- end}}
       {{- end}}
       {{- if .Date}}
-      {"label":"Date", "value":"{{.Date}}"}
+      {"label":"Date", "value":"{{.Date}}"}{{- if .Description}},{{- end}}
       {{- end}}
       {{- if .Description}}
       {"label":"Physical Description", "value":"{{.Description}}"}
