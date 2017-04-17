@@ -305,7 +305,7 @@ func renderIiifMetadata(data iiifData, rw http.ResponseWriter) {
  */
 func parseSolrRecord(data *iiifData) {
 	// request index record from solr...
-	url := fmt.Sprintf("%s/select?q=id:%s", viper.GetString("virgo_solr_url"), data.VirgoKey)
+	url := fmt.Sprintf("%s/select?q=id:\"%s\"", viper.GetString("virgo_solr_url"), data.VirgoKey)
 	resp, err := http.Get(url)
 	if err != nil {
 		logger.Printf("Unable to get Solr index: %s", err.Error())
