@@ -6,24 +6,10 @@
    "thumbnail":"{{ .IiifURL }}/{{.ExemplarPID}}/full/!200,200/0/default.jpg",
    {{- end}}
    "label":"{{.Title}}",
-   {{- if .Description}}
-   "description":"{{.Description}}",
-   {{- end}}
    "metadata": [
-      {{- if .Author}}
-      {"label":"Creator", "value":"{{.Author}}"}{{- if .CallNumber}},{{- end}}
-      {{- end}}
-      {{- if .CallNumber}}
-      {"label":"Call Number", "value":"{{.CallNumber}}"}{{- if .Format}},{{- end}}
-      {{- end}}
-      {{- if .Format}}
-      {"label":"Format", "value":"{{.Format}}"}{{- if .Date}},{{- end}}
-      {{- end}}
-      {{- if .Date}}
-      {"label":"Date", "value":"{{.Date}}"}{{- if .Description}},{{- end}}
-      {{- end}}
-      {{- if .Description}}
-      {"label":"Physical Description", "value":"{{.Description}}"}
+      {{- range $index, $element := .Metadata -}}
+      {{- if $index}},{{end -}}
+      {"label":"{{.Name}}", "value":"{{.Value}}"}
       {{- end}}
    ],
    "license":"{{.License}}",

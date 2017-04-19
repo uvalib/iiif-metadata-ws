@@ -33,6 +33,11 @@ type masterFile struct {
 	Height      int
 }
 
+type metadata struct {
+	Name  string
+	Value string
+}
+
 type iiifData struct {
 	VirgoURL    string
 	IiifURL     string
@@ -40,15 +45,11 @@ type iiifData struct {
 	VirgoKey    string
 	MetadataPID string
 	Title       string
-	Author      string
-	Description string
-	Date        string
-	Format      string
-	CallNumber  string
 	StartPage   int
 	ExemplarPID string
 	License     string
 	Related     string
+	Metadata    []metadata
 	MasterFiles []masterFile
 }
 
@@ -183,8 +184,13 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 		return
 	}
 
-	data.Author = author.String
-	data.CallNumber = callNumber.String
+	if author.Valid {
+		data.Metadata = append(data.Metadata, metadata{"Author", author.String})
+	}
+	if callNumber.Valid {
+		data.Metadata = append(data.Metadata, metadata{"Call Number", callNumber.String})
+	}
+
 	if catalogKey.Valid {
 		data.VirgoKey = catalogKey.String
 	} else {
@@ -347,7 +353,9 @@ func parseSolrRecord(data *iiifData) {
 			buffer.WriteString(val)
 		}
 	}
-	data.Format = buffer.String()
+	if buffer.Len() > 0 {
+		data.Metadata = append(data.Metadata, metadata{"Format", buffer.String()})
+	}
 
 	// See if there is MARC data to parse for physical description
 	marc := xpath.String(ctx.Find("//str[@name='marc_display']"))
@@ -358,14 +366,14 @@ func parseSolrRecord(data *iiifData) {
 	// Try published_date_display (for sirsi records)
 	date := xpath.String(ctx.Find("//arr[@name='published_date_display']/str"))
 	if len(date) > 0 {
-		data.Date = date
+		data.Metadata = append(data.Metadata, metadata{"Date", date})
 		return
 	}
 
 	// .. not found, try year_display (for XML records)
 	date = xpath.String(ctx.Find("arr[@name='year_display']/str"))
 	if len(date) > 0 {
-		data.Date = date
+		data.Metadata = append(data.Metadata, metadata{"Date", date})
 	}
 }
 
@@ -386,7 +394,9 @@ func parseMarc(data *iiifData, marc string) {
 		}
 		buffer.WriteString(val)
 	}
-	data.Description = buffer.String()
+	if buffer.Len() > 0 {
+		data.Metadata = append(data.Metadata, metadata{"Physical Description", buffer.String()})
+	}
 }
 
 /**
