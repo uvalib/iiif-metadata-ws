@@ -18,7 +18,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const version = "1.6.0"
+const version = "1.6.1"
 
 // globals to share between main and the HTTP handler
 var db *sql.DB
@@ -164,6 +164,15 @@ func determinePidType(pid string) (pidType string) {
 	return
 }
 
+func cleanString(str string) string {
+	safe := strings.Replace(str, "\n", " ", -1)    /* escape for json */
+	safe = strings.Replace(safe, "\r", " ", -1)    /* escape for json */
+	safe = strings.Replace(safe, "\t", " ", -1)    /* escape for json */
+	safe = strings.Replace(safe, "\\", "\\\\", -1) /* escape for json */
+	safe = strings.Replace(safe, "\x0C", "", -1)   /* illegal in XML */
+	return safe
+}
+
 func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 	var metadataID int
 	var exemplar sql.NullString
@@ -216,8 +225,8 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
 			return
 		}
-		mf.Description = mfDesc.String
-		mf.Title = mfTitle.String
+		mf.Description = cleanString(mfDesc.String)
+		mf.Title = cleanString(mfTitle.String)
 
 		// If the metadata for this master file is XML, the MODS desc metadata in record overrides title and desc
 		if descMetadata.Valid && strings.Compare("XmlMetadata", metadataType) == 0 {
@@ -250,7 +259,7 @@ func generateFromComponent(pid string, data iiifData, rw http.ResponseWriter) {
 		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
 		return
 	}
-	data.Title = cTitle.String
+	data.Title = cleanString(cTitle.String)
 
 	// Get data for all master files attached to this component
 	pgNum := 0
@@ -271,8 +280,8 @@ func generateFromComponent(pid string, data iiifData, rw http.ResponseWriter) {
 			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
 			return
 		}
-		mf.Description = mfDesc.String
-		mf.Title = mfTitle.String
+		mf.Description = cleanString(mfDesc.String)
+		mf.Title = cleanString(mfTitle.String)
 
 		// MODS desc metadata in record overrides title and desc
 		if mfDescMetadata.Valid {
@@ -429,19 +438,19 @@ func parseMods(mfData *masterFile, mods string) {
 	}
 	title := xpath.String(ctx.Find("/ns:mods/ns:titleInfo/ns:title/text()"))
 	if len(title) > 0 {
-		mfData.Title = title
+		mfData.Title = cleanString(title)
 	}
 
 	// first try <abstract displayLabel="Description">
 	desc := xpath.String(ctx.Find("//ns:abstract[@displayLabel='Description']/text()"))
 	if len(desc) > 0 {
-		mfData.Description = desc
+		mfData.Description = cleanString(desc)
 		return
 	}
 
 	// .. next try for a provenance note
 	desc = xpath.String(ctx.Find("//ns:note[@type='provenance' and @displayLabel='staff']/text()"))
 	if len(desc) > 0 {
-		mfData.Description = fmt.Sprintf("Staff note: %s", desc)
+		mfData.Description = cleanString(fmt.Sprintf("Staff note: %s", desc))
 	}
 }
