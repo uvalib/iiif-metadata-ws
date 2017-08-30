@@ -14,7 +14,7 @@
    ],
    "license":"{{.License}}",
    "attribution":"Provided by the University of Virginia Library",
-   "logo":"http://iiif.lib.virginia.edu/iiif/static:1/full/full/0/default.jpg",
+   "logo":"https://iiif.lib.virginia.edu/iiif/static:1/full/full/0/default.jpg",
    "related":"{{.VirgoURL}}/{{.VirgoKey}}",
    "sequences":[
       {
