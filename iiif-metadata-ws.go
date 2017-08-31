@@ -322,7 +322,8 @@ func renderIiifMetadata(data iiifData, rw http.ResponseWriter) {
  */
 func parseSolrRecord(data *iiifData, metadatType string) {
 	// request index record from TRACKSYS solr...
-	url := fmt.Sprintf("%s/%s", viper.GetString("tracksys_solr_url"), data.MetadataPID)
+	// url := fmt.Sprintf("%s/%s", viper.GetString("tracksys_solr_url"), data.MetadataPID)
+	url := fmt.Sprintf("%s/select?q=id:\"%s\"", viper.GetString("virgo_solr_url"), data.VirgoKey)
 	logger.Printf("Get Solr record from %s...", url)
 	resp, err := http.Get(url)
 	if err != nil {
