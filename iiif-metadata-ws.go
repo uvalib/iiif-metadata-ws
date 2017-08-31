@@ -18,7 +18,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const version = "1.6.1"
+const version = "1.6.2"
 
 // globals to share between main and the HTTP handler
 var db *sql.DB
@@ -193,7 +193,9 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 		return
 	}
 
-	if author.Valid {
+	// only take the author field from the DB for SirsiMetadata. For
+	// XmlMetadata, the field needs to be pulled from the author_display of solr
+	if author.Valid && strings.Compare(metadataType, "SirsiMetadata") == 0 {
 		data.Metadata = append(data.Metadata, metadata{"Author", author.String})
 	}
 	if callNumber.Valid {
@@ -205,7 +207,7 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 	} else {
 		data.VirgoKey = data.MetadataPID
 	}
-	parseSolrRecord(&data)
+	parseSolrRecord(&data, metadataType)
 
 	// Get data for all master files from units associated with the metadata record
 	qs = `select m.pid, m.filename, m.title, m.description, t.width, t.height from master_files m
@@ -318,9 +320,10 @@ func renderIiifMetadata(data iiifData, rw http.ResponseWriter) {
 /**
  * Parse XML solr index for format_facet and published_display (sirsi) or year_display (xml)
  */
-func parseSolrRecord(data *iiifData) {
-	// request index record from solr...
-	url := fmt.Sprintf("%s/select?q=id:\"%s\"", viper.GetString("virgo_solr_url"), data.VirgoKey)
+func parseSolrRecord(data *iiifData, metadatType string) {
+	// request index record from TRACKSYS solr...
+	url := fmt.Sprintf("%s/%s", viper.GetString("tracksys_solr_url"), data.MetadataPID)
+	logger.Printf("Get Solr record from %s...", url)
 	resp, err := http.Get(url)
 	if err != nil {
 		logger.Printf("Unable to get Solr index: %s", err.Error())
@@ -351,7 +354,7 @@ func parseSolrRecord(data *iiifData) {
 
 	// Query for the data; format_facet. This has a bunch of <str> children that
 	// need to be combined to make the final format string. Skip 'Online'
-	nodes := xpath.NodeList(ctx.Find("//arr[@name='format_facet']/str"))
+	nodes := xpath.NodeList(ctx.Find(`/add/doc/field[@name="format_facet"]`)) //field[@name='format_facet']/str"))
 	var buffer bytes.Buffer
 	for i := 0; i < len(nodes); i++ {
 		val := nodes[i].NodeValue()
@@ -372,15 +375,23 @@ func parseSolrRecord(data *iiifData) {
 		parseMarc(data, marc)
 	}
 
+	// For XML metadata, pull the Author from author_display
+	if strings.Compare(metadatType, "XmlMetadata") == 0 {
+		author := xpath.String(ctx.Find(`/add/doc/field[@name="author_display"]`))
+		if len(author) > 0 {
+			data.Metadata = append(data.Metadata, metadata{"Author", author})
+		}
+	}
+
 	// Try published_date_display (for sirsi records)
-	date := xpath.String(ctx.Find("//arr[@name='published_date_display']/str"))
+	date := xpath.String(ctx.Find(`/add/doc/field[@name="published_date_display"]`))
 	if len(date) > 0 {
 		data.Metadata = append(data.Metadata, metadata{"Date", date})
 		return
 	}
 
 	// .. not found, try year_display (for XML records)
-	date = xpath.String(ctx.Find("arr[@name='year_display']/str"))
+	date = xpath.String(ctx.Find(`/add/doc/field[@name="year_display"]`))
 	if len(date) > 0 {
 		data.Metadata = append(data.Metadata, metadata{"Date", date})
 	}

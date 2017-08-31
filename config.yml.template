@@ -9,4 +9,5 @@ https: false
 ssl_crt: cert.pem
 ssl_key: key.pem
 virgo_solr_url: http://solr.lib.virginia.edu:8082/solr/core
+tracksys_solr_url: http://tracksys.lib.virginia.edu/api/solr
 virgo_url: http://search.lib.virginia.edu/catalog
