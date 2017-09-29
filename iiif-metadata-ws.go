@@ -215,7 +215,12 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 	// Get data for all master files from units associated with the metadata record
 	qs = `select m.pid, m.filename, m.title, m.description, t.width, t.height from master_files m
 	      inner join units u on u.id=m.unit_id
-	      inner join image_tech_meta t on m.id=t.master_file_id where m.metadata_id = ? order by m.filename asc`
+	      inner join image_tech_meta t on m.id=t.master_file_id where m.metadata_id = ? and u.include_in_dl = 1  order by m.filename asc`
+	if strings.Compare(metadataType, "ExternalMetadata") == 0 {
+		qs = `select m.pid, m.filename, m.title, m.description, t.width, t.height from master_files m
+   	      inner join units u on u.id=m.unit_id
+   	      inner join image_tech_meta t on m.id=t.master_file_id where m.metadata_id = ? order by m.filename asc`
+	}
 	rows, _ := db.Query(qs, metadataID)
 	defer rows.Close()
 	pgNum := 0
