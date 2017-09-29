@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -18,7 +19,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const version = "1.7.0"
+const version = "1.7.1"
 
 // globals to share between main and the HTTP handler
 var db *sql.DB
@@ -121,6 +122,7 @@ func rootHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	logger.Printf("%s %s", req.Method, req.RequestURI)
 	pid := params.ByName("pid")
+	unitID, _ := strconv.Atoi(req.URL.Query().Get("unit"))
 
 	// initialize IIIF data struct
 	var data iiifData
@@ -133,7 +135,7 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 	if pidType == "metadata" {
 		logger.Printf("%s is a metadata record", pid)
 		data.MetadataPID = pid
-		generateFromMetadataRecord(data, rw)
+		generateFromMetadataRecord(data, rw, unitID)
 	} else if pidType == "component" {
 		logger.Printf("%s is a component", pid)
 		data.MetadataPID = pid
@@ -173,7 +175,7 @@ func cleanString(str string) string {
 	return safe
 }
 
-func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
+func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter, unitID int) {
 	var metadataID int
 	var exemplar sql.NullString
 	var descMetadata sql.NullString
@@ -213,15 +215,24 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter) {
 	}
 
 	// Get data for all master files from units associated with the metadata record
-	qs = `select m.pid, m.filename, m.title, m.description, t.width, t.height from master_files m
-	      inner join units u on u.id=m.unit_id
-	      inner join image_tech_meta t on m.id=t.master_file_id where m.metadata_id = ? and u.include_in_dl = 1  order by m.filename asc`
-	if strings.Compare(metadataType, "ExternalMetadata") == 0 {
-		qs = `select m.pid, m.filename, m.title, m.description, t.width, t.height from master_files m
-   	      inner join units u on u.id=m.unit_id
-   	      inner join image_tech_meta t on m.id=t.master_file_id where m.metadata_id = ? order by m.filename asc`
+	// The default query only gets master files for units that are in the DL. This
+	// can be overridden if a unit ID was specified or of the metadata is external. In these
+	// cases, don't care if unit is in DL or not
+	var qsBuff bytes.Buffer
+	qsBuff.WriteString("select m.pid, m.filename, m.title, m.description, t.width, t.height from master_files m")
+	qsBuff.WriteString(" inner join units u on u.id = m.unit_id")
+	qsBuff.WriteString(" inner join image_tech_meta t on m.id=t.master_file_id where m.metadata_id = ?")
+	if unitID > 0 {
+		logger.Printf("Only including masterfiles from unit %d", unitID)
+		qsBuff.WriteString(fmt.Sprintf(" and u.id=%d order by m.filename asc", unitID))
+	} else if strings.Compare(metadataType, "ExternalMetadata") == 0 {
+		logger.Printf("This is External metadata; including all master files")
+		qsBuff.WriteString(" order by m.filename asc")
+	} else {
+		logger.Printf("Only including masterfiles from units in the DL")
+		qsBuff.WriteString("  and u.include_in_dl = 1 order by m.filename asc")
 	}
-	rows, _ := db.Query(qs, metadataID)
+	rows, _ := db.Query(qsBuff.String(), metadataID)
 	defer rows.Close()
 	pgNum := 0
 	for rows.Next() {
