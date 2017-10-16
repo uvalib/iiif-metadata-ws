@@ -19,7 +19,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const version = "1.7.1"
+const version = "1.7.2"
 
 // globals to share between main and the HTTP handler
 var db *sql.DB
@@ -339,10 +339,12 @@ func renderIiifMetadata(data iiifData, rw http.ResponseWriter) {
 /**
  * Parse XML solr index for format_facet and published_display (sirsi) or year_display (xml)
  */
-func parseSolrRecord(data *iiifData, metadatType string) {
-	// request index record from TRACKSYS solr...
+func parseSolrRecord(data *iiifData, metadataType string) {
+	// request index record from TRACKSYS solr for XML, but Virgo fir SIRSI...
 	url := fmt.Sprintf("%s/%s?no_external=1", viper.GetString("tracksys_solr_url"), data.MetadataPID)
-	// url := fmt.Sprintf("%s/select?q=id:\"%s\"", viper.GetString("virgo_solr_url"), data.VirgoKey)
+	if strings.Compare(metadataType, "SirsiMetadata") == 0 {
+		url = fmt.Sprintf("%s/select?q=id:\"%s\"", viper.GetString("virgo_solr_url"), data.VirgoKey)
+	}
 	logger.Printf("Get Solr record from %s...", url)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -396,7 +398,7 @@ func parseSolrRecord(data *iiifData, metadatType string) {
 	}
 
 	// For XML metadata, pull the Author from author_display
-	if strings.Compare(metadatType, "XmlMetadata") == 0 {
+	if strings.Compare(metadataType, "XmlMetadata") == 0 {
 		author := xpath.String(ctx.Find(`/add/doc/field[@name="author_display"]`))
 		if len(author) > 0 {
 			data.Metadata = append(data.Metadata, metadata{"Author", author})
