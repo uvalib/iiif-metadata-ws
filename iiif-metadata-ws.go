@@ -122,6 +122,9 @@ func rootHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	logger.Printf("%s %s", req.Method, req.RequestURI)
 	pid := params.ByName("pid")
+	if strings.Compare(pid, "favicon.ico") == 0 {
+		return
+	}
 	unitID, _ := strconv.Atoi(req.URL.Query().Get("unit"))
 
 	// initialize IIIF data struct
@@ -129,16 +132,15 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 	data.URL = fmt.Sprintf("http://%s%s", req.Host, req.URL)
 	data.IiifURL = viper.GetString("iiif_url")
 	data.VirgoURL = viper.GetString("virgo_url")
+	data.MetadataPID = pid
 
 	// handle different types of PID
 	pidType := determinePidType(pid)
 	if pidType == "metadata" {
 		logger.Printf("%s is a metadata record", pid)
-		data.MetadataPID = pid
 		generateFromMetadataRecord(data, rw, unitID)
 	} else if pidType == "component" {
 		logger.Printf("%s is a component", pid)
-		data.MetadataPID = pid
 		generateFromComponent(pid, data, rw)
 	} else {
 		logger.Printf("Couldn't find %s", pid)
@@ -341,17 +343,22 @@ func renderIiifMetadata(data iiifData, rw http.ResponseWriter) {
  */
 func parseSolrRecord(data *iiifData, metadataType string) {
 	// request index record from TRACKSYS solr for XML, but Virgo fir SIRSI...
-	url := fmt.Sprintf("%s/%s?no_external=1", viper.GetString("tracksys_solr_url"), data.MetadataPID)
+	solrURL := fmt.Sprintf("%s/%s?no_external=1", viper.GetString("tracksys_solr_url"), data.MetadataPID)
 	if strings.Compare(metadataType, "SirsiMetadata") == 0 {
-		url = fmt.Sprintf("%s/select?q=id:\"%s\"", viper.GetString("virgo_solr_url"), data.VirgoKey)
+		solrURL = fmt.Sprintf("%s/select?q=id:%s", viper.GetString("virgo_solr_url"), data.VirgoKey)
 	}
-	logger.Printf("Get Solr record from %s...", url)
-	resp, err := http.Get(url)
+	logger.Printf("Get Solr record from %s...", solrURL)
+	resp, err := http.Get(solrURL)
 	if err != nil {
 		logger.Printf("Unable to get Solr index: %s", err.Error())
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		logger.Printf("Bad response status code: %d", resp.StatusCode)
+		return
+	}
 
 	// parse the XML response into a document
 	doc, err := libxml2.ParseReader(resp.Body)
