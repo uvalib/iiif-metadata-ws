@@ -6,5 +6,6 @@ tmp/*
 *.bak
 bin
 dist
+vendor
 # Ignore application configuration
 /config.yml
