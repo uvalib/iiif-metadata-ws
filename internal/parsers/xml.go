@@ -1,4 +1,4 @@
-package main
+package parsers
 
 import (
 	"bytes"
@@ -8,13 +8,12 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+	"github.com/uvalib/iiif-metadata-ws/internal/models"
 	xmlpath "gopkg.in/xmlpath.v2"
 )
 
-/**
- * Parse physicsl description from MARC string
- */
-func parseMarc(data *iiifData, marc string) {
+// parseMARC will extract physicsl description from MARC string
+func parseMARC(data *models.IIIF, marc string) {
 	xmlRoot, err := xmlpath.Parse(strings.NewReader(marc))
 	if err != nil {
 		log.Printf("WARNING: Unable to parse MARC: %s; skipping", err.Error())
@@ -24,14 +23,12 @@ func parseMarc(data *iiifData, marc string) {
 	nodes := path.Iter(xmlRoot)
 	val := getArrayValues(nodes, " ")
 	if len(val) > 0 {
-		data.Metadata = append(data.Metadata, metadata{"Physical Description", val})
+		data.Metadata = append(data.Metadata, models.Metadata{"Physical Description", val})
 	}
 }
 
-/**
- * Parse title and description from MODS string
- */
-func parseMods(mfData *masterFile, mods string) {
+// ParseMODS will pull title and description from MODS string
+func ParseMODS(mfData *models.MasterFile, mods string) {
 	xmlRoot, err := xmlpath.Parse(strings.NewReader(mods))
 	if err != nil {
 		log.Printf("WARNING: Unable to parse MODS: %s; skipping", err.Error())
@@ -40,14 +37,14 @@ func parseMods(mfData *masterFile, mods string) {
 	path := xmlpath.MustCompile("//titleInfo/title")
 	val, ok := path.String(xmlRoot)
 	if ok {
-		mfData.Title = cleanString(val)
+		mfData.Title = models.CleanString(val)
 	}
 
 	// first try <abstract displayLabel="Description">
 	path = xmlpath.MustCompile("//abstract[@displayLabel='Description']")
 	val, ok = path.String(xmlRoot)
 	if ok {
-		mfData.Description = cleanString(val)
+		mfData.Description = models.CleanString(val)
 		return
 	}
 
@@ -55,14 +52,13 @@ func parseMods(mfData *masterFile, mods string) {
 	path = xmlpath.MustCompile("//note[@type='provenance' and @displayLabel='staff']")
 	val, ok = path.String(xmlRoot)
 	if ok {
-		mfData.Description = cleanString(fmt.Sprintf("Staff note: %s", val))
+		mfData.Description = models.CleanString(fmt.Sprintf("Staff note: %s", val))
 	}
 }
 
-/**
- * Parse XML solr index for format_facet and published_display (sirsi) or year_display (xml)
- */
-func parseSolrRecord(data *iiifData, metadataType string) {
+// ParseSolrRecord will parse XML solr index for format_facet and
+// published_display (sirsi) or year_display (xml)
+func ParseSolrRecord(data *models.IIIF, metadataType string) {
 	if strings.Compare(metadataType, "SirsiMetadata") == 0 {
 		parseVirgoSolr(data)
 	} else {
@@ -70,7 +66,7 @@ func parseSolrRecord(data *iiifData, metadataType string) {
 	}
 }
 
-func parseVirgoSolr(data *iiifData) {
+func parseVirgoSolr(data *models.IIIF) {
 	solrURL := fmt.Sprintf("%s/select?q=id:%s", viper.GetString("virgo_solr_url"), data.VirgoKey)
 	log.Printf("Get Solr record from %s...", solrURL)
 	resp, err := http.Get(solrURL)
@@ -106,14 +102,14 @@ func parseVirgoSolr(data *iiifData) {
 		}
 	}
 	if buffer.Len() > 0 {
-		data.Metadata = append(data.Metadata, metadata{"Format", buffer.String()})
+		data.Metadata = append(data.Metadata, models.Metadata{"Format", buffer.String()})
 	}
 
 	// See if there is MARC data to parse for physical description
 	path = xmlpath.MustCompile("//str[@name='marc_display']")
 	marc, ok := path.String(xmlRoot)
 	if ok {
-		parseMarc(data, marc)
+		parseMARC(data, marc)
 	}
 
 	// Try published_date_display
@@ -121,12 +117,12 @@ func parseVirgoSolr(data *iiifData) {
 	nodes = path.Iter(xmlRoot)
 	date := getArrayValues(nodes, ", ")
 	if len(date) > 0 {
-		data.Metadata = append(data.Metadata, metadata{"Date", date})
+		data.Metadata = append(data.Metadata, models.Metadata{"Date", date})
 		return
 	}
 }
 
-func parseTracksysSolr(data *iiifData) {
+func parseTracksysSolr(data *models.IIIF) {
 	// For XML metadata
 	solrURL := fmt.Sprintf("%s/%s?no_external=1", viper.GetString("tracksys_solr_url"), data.MetadataPID)
 	log.Printf("Get Solr record from %s...", solrURL)
@@ -161,21 +157,21 @@ func parseTracksysSolr(data *iiifData) {
 		}
 	}
 	if buffer.Len() > 0 {
-		data.Metadata = append(data.Metadata, metadata{"Format", buffer.String()})
+		data.Metadata = append(data.Metadata, models.Metadata{"Format", buffer.String()})
 	}
 
 	// Pull the Author from author_display
 	path = xmlpath.MustCompile("//field[@name='author_display']")
 	val, ok := path.String(xmlRoot)
 	if ok {
-		data.Metadata = append(data.Metadata, metadata{"Author", val})
+		data.Metadata = append(data.Metadata, models.Metadata{"Author", val})
 	}
 
 	// Pull the Date from year_display
 	path = xmlpath.MustCompile("//field[@name='year_display']")
 	val, ok = path.String(xmlRoot)
 	if ok {
-		data.Metadata = append(data.Metadata, metadata{"Date", val})
+		data.Metadata = append(data.Metadata, models.Metadata{"Date", val})
 	}
 }
 

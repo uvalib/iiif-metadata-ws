@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"database/sql"
+	"errors"
 	"fmt"
 	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -16,41 +18,14 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/cors"
 	"github.com/spf13/viper"
+	"github.com/uvalib/iiif-metadata-ws/internal/models"
+	"github.com/uvalib/iiif-metadata-ws/internal/parsers"
 )
 
 const version = "1.8.0"
 
 // globals to share between main and the HTTP handler
 var db *sql.DB
-
-// Types used to generate the JSON response; masterFile and iiifData
-type masterFile struct {
-	PID         string
-	Title       string
-	Description string
-	Width       int
-	Height      int
-}
-
-type metadata struct {
-	Name  string
-	Value string
-}
-
-type iiifData struct {
-	VirgoURL    string
-	IiifURL     string
-	URL         string
-	VirgoKey    string
-	MetadataPID string
-	Title       string
-	StartPage   int
-	ExemplarPID string
-	License     string
-	Related     string
-	Metadata    []metadata
-	MasterFiles []masterFile
-}
 
 /**
  * Main entry point for the web service
@@ -74,11 +49,6 @@ func main() {
 	db, err = sql.Open("mysql", connectStr)
 	if err != nil {
 		fmt.Printf("Database connection failed: %s", err.Error())
-		os.Exit(1)
-	}
-	_, err = db.Query("SELECT 1")
-	if err != nil {
-		fmt.Printf("Database query failed: %s", err.Error())
 		os.Exit(1)
 	}
 	defer db.Close()
@@ -133,7 +103,7 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 	unitID, _ := strconv.Atoi(req.URL.Query().Get("unit"))
 
 	// initialize IIIF data struct
-	var data iiifData
+	var data models.IIIF
 	data.URL = fmt.Sprintf("http://%s%s", req.Host, req.URL)
 	data.IiifURL = viper.GetString("iiif_url")
 	data.VirgoURL = viper.GetString("virgo_url")
@@ -148,6 +118,15 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 		log.Printf("%s is a component", pid)
 		generateFromComponent(pid, data, rw)
 	} else {
+		// See if it is in Apollo...
+		apolloURL := fmt.Sprintf("%s/legacy/lookup/%s", viper.GetString("apollo_api_url"), pid)
+		apolloPID, err := getAPIResponse(apolloURL)
+		if err == nil {
+			log.Printf("%s was found in Apollo as %s", pid, apolloPID)
+			generateFromApollo(pid, apolloPID, data, rw)
+			return
+		}
+
 		log.Printf("ERROR: Couldn't find %s", pid)
 		rw.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(rw, "PID %s not found", pid)
@@ -173,19 +152,58 @@ func determinePidType(pid string) (pidType string) {
 	return
 }
 
-func cleanString(str string) string {
-	safe := strings.Replace(str, "\n", " ", -1)    /* escape for json */
-	safe = strings.Replace(safe, "\r", " ", -1)    /* escape for json */
-	safe = strings.Replace(safe, "\t", " ", -1)    /* escape for json */
-	safe = strings.Replace(safe, "\\", "\\\\", -1) /* escape for json */
-	safe = strings.Replace(safe, "\x0C", "", -1)   /* illegal in XML */
-	return safe
+func getAPIResponse(url string) (string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := ioutil.ReadAll(resp.Body)
+	respString := string(bodyBytes)
+	if resp.StatusCode != 200 {
+		return "", errors.New(respString)
+	}
+	return respString, nil
+}
+
+// Generate the IIIF manifest from data found in Apollo
+func generateFromApollo(tsPID string, apolloPID string, data models.IIIF, rw http.ResponseWriter) {
+	// Get some metadata about the collection from Apollo API...
+	apolloURL := fmt.Sprintf("%s/items/%s", viper.GetString("apollo_api_url"), apolloPID)
+	respStr, err := getAPIResponse(apolloURL)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Parse collection-level metadata from JSON response
+	err = parsers.GetMetadataFromJSON(&data, respStr)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Get metadata about masterfiles from the tracksys Manufest API
+	tsURL := fmt.Sprintf("%s/items/%s", viper.GetString("tracksys_api_url"), tsPID)
+	mfRespStr, err := getAPIResponse(tsURL)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	err = parsers.GetMasterFilesFromJSON(&data, mfRespStr)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	fmt.Fprintf(rw, "hi")
 }
 
 /**
  * Generate the IIIF manifest for a METADATA record
  */
-func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter, unitID int) {
+func generateFromMetadataRecord(data models.IIIF, rw http.ResponseWriter, unitID int) {
 	var metadataID int
 	var exemplar sql.NullString
 	var descMetadata sql.NullString
@@ -206,7 +224,7 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter, unitID in
 	}
 
 	if callNumber.Valid {
-		data.Metadata = append(data.Metadata, metadata{"Call Number", callNumber.String})
+		data.Metadata = append(data.Metadata, models.Metadata{"Call Number", callNumber.String})
 	}
 	data.VirgoKey = data.MetadataPID
 	if catalogKey.Valid {
@@ -216,11 +234,11 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter, unitID in
 	// only take the author field from the DB for SirsiMetadata. For
 	// XmlMetadata, the field needs to be pulled from the author_display of solr
 	if author.Valid && strings.Compare(metadataType, "SirsiMetadata") == 0 {
-		data.Metadata = append(data.Metadata, metadata{"Author", author.String})
+		data.Metadata = append(data.Metadata, models.Metadata{"Author", author.String})
 	}
 
 	if strings.Compare(metadataType, "ExternalMetadata") != 0 {
-		parseSolrRecord(&data, metadataType)
+		parsers.ParseSolrRecord(&data, metadataType)
 	}
 
 	// Get data for all master files from units associated with the metadata record
@@ -245,7 +263,7 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter, unitID in
 	defer rows.Close()
 	pgNum := 0
 	for rows.Next() {
-		var mf masterFile
+		var mf models.MasterFile
 		var mfFilename string
 		var mfTitle sql.NullString
 		var mfDesc sql.NullString
@@ -255,12 +273,12 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter, unitID in
 			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
 			return
 		}
-		mf.Description = cleanString(mfDesc.String)
-		mf.Title = cleanString(mfTitle.String)
+		mf.Description = models.CleanString(mfDesc.String)
+		mf.Title = models.CleanString(mfTitle.String)
 
 		// If the metadata for this master file is XML, the MODS desc metadata in record overrides title and desc
 		if descMetadata.Valid && strings.Compare("XmlMetadata", metadataType) == 0 {
-			parseMods(&mf, descMetadata.String)
+			parsers.ParseMODS(&mf, descMetadata.String)
 		}
 		data.MasterFiles = append(data.MasterFiles, mf)
 
@@ -276,7 +294,7 @@ func generateFromMetadataRecord(data iiifData, rw http.ResponseWriter, unitID in
 	renderIiifMetadata(data, rw)
 }
 
-func generateFromComponent(pid string, data iiifData, rw http.ResponseWriter) {
+func generateFromComponent(pid string, data models.IIIF, rw http.ResponseWriter) {
 	// grab all of the masterfiles hooked to this component
 	var componentID int
 	var exemplar sql.NullString
@@ -289,7 +307,7 @@ func generateFromComponent(pid string, data iiifData, rw http.ResponseWriter) {
 		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
 		return
 	}
-	data.Title = cleanString(cTitle.String)
+	data.Title = models.CleanString(cTitle.String)
 
 	// Get data for all master files attached to this component
 	pgNum := 0
@@ -299,7 +317,7 @@ func generateFromComponent(pid string, data iiifData, rw http.ResponseWriter) {
 	rows, _ := db.Query(qs, componentID)
 	defer rows.Close()
 	for rows.Next() {
-		var mf masterFile
+		var mf models.MasterFile
 		var mfFilename string
 		var mfTitle sql.NullString
 		var mfDesc sql.NullString
@@ -310,12 +328,12 @@ func generateFromComponent(pid string, data iiifData, rw http.ResponseWriter) {
 			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
 			return
 		}
-		mf.Description = cleanString(mfDesc.String)
-		mf.Title = cleanString(mfTitle.String)
+		mf.Description = models.CleanString(mfDesc.String)
+		mf.Title = models.CleanString(mfTitle.String)
 
 		// MODS desc metadata in record overrides title and desc
 		if mfDescMetadata.Valid {
-			parseMods(&mf, mfDescMetadata.String)
+			parsers.ParseMODS(&mf, mfDescMetadata.String)
 		}
 
 		data.MasterFiles = append(data.MasterFiles, mf)
@@ -333,7 +351,7 @@ func generateFromComponent(pid string, data iiifData, rw http.ResponseWriter) {
 	renderIiifMetadata(data, rw)
 }
 
-func renderIiifMetadata(data iiifData, rw http.ResponseWriter) {
+func renderIiifMetadata(data models.IIIF, rw http.ResponseWriter) {
 	// rw.Header().Set("content-type", "application/json; charset=utf-8")
 	tmpl := template.Must(template.ParseFiles("templates/iiif.json"))
 	err := tmpl.ExecuteTemplate(rw, "iiif.json", data)
