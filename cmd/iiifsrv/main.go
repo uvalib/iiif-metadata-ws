@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -109,47 +108,39 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 	data.VirgoURL = viper.GetString("virgo_url")
 	data.MetadataPID = pid
 
-	// handle different types of PID
-	pidType := determinePidType(pid)
-	if pidType == "metadata" {
-		log.Printf("%s is a metadata record", pid)
+	// Tracksys is the system that tracks items that contain
+	// masterfiles. All pids the arrive at the IIIF service should
+	// refer to these items. Determine what type the PID is:
+	pidURL := fmt.Sprintf("%s/pid/%s/type", viper.GetString("tracksys_api_url"), pid)
+	pidType, err := getAPIResponse(pidURL)
+	if err != nil {
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(rw, "Unable to connect with TrackSys to identify pid %s", pid)
+		return
+	}
+
+	if pidType == "sirsi_metadata" {
+		log.Printf("%s is a sirsi metadata record", pid)
+		generateFromMetadataRecord(data, rw, unitID)
+	} else if pidType == "xml_metadata" {
+		// FIXME split logic
+		log.Printf("%s is an xml metadata record", pid)
+		generateFromMetadataRecord(data, rw, unitID)
+	} else if pidType == "apollo_metadata" {
+		log.Printf("%s is an apollo metadata record", pid)
+		generateFromApollo(data, rw)
+	} else if pidType == "archivesspace_metadata" {
+		// FIXME split logic
+		log.Printf("%s is an as metadata record", pid)
 		generateFromMetadataRecord(data, rw, unitID)
 	} else if pidType == "component" {
 		log.Printf("%s is a component", pid)
 		generateFromComponent(pid, data, rw)
 	} else {
-		// See if it is in Apollo...
-		apolloURL := fmt.Sprintf("%s/legacy/lookup/%s", viper.GetString("apollo_api_url"), pid)
-		apolloPID, err := getAPIResponse(apolloURL)
-		if err == nil {
-			log.Printf("%s was found in Apollo as %s", pid, apolloPID)
-			generateFromApollo(pid, apolloPID, data, rw)
-			return
-		}
-
 		log.Printf("ERROR: Couldn't find %s", pid)
 		rw.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(rw, "PID %s not found", pid)
 	}
-}
-
-func determinePidType(pid string) (pidType string) {
-	var cnt int
-	pidType = "invalid"
-	qs := "select count(*) as cnt from metadata b where pid=?"
-	db.QueryRow(qs, pid).Scan(&cnt)
-	if cnt == 1 {
-		pidType = "metadata"
-		return
-	}
-
-	qs = "select count(*) as cnt from components b where pid=?"
-	db.QueryRow(qs, pid).Scan(&cnt)
-	if cnt == 1 {
-		pidType = "component"
-		return
-	}
-	return
 }
 
 func getAPIResponse(url string) (string, error) {
@@ -167,42 +158,44 @@ func getAPIResponse(url string) (string, error) {
 }
 
 // Generate the IIIF manifest from data found in Apollo
-func generateFromApollo(tsPID string, apolloPID string, data models.IIIF, rw http.ResponseWriter) {
-	// Get some metadata about the collection from Apollo API...
-	apolloURL := fmt.Sprintf("%s/items/%s", viper.GetString("apollo_api_url"), apolloPID)
+func generateFromApollo(data models.IIIF, rw http.ResponseWriter) {
+	// Get the Apollo PID
+	PID := data.MetadataPID
+	apolloURL := fmt.Sprintf("%s/legacy/lookup/%s", viper.GetString("apollo_api_url"), data.MetadataPID)
 	respStr, err := getAPIResponse(apolloURL)
+	if err == nil {
+		PID = respStr
+		log.Printf("Converted Tracksys PID %s to Apollo PID %s", data.MetadataPID, PID)
+	}
+
+	// Get some metadata about the collection from Apollo API...
+	apolloURL = fmt.Sprintf("%s/items/%s", viper.GetString("apollo_api_url"), PID)
+	respStr, err = getAPIResponse(apolloURL)
 	if err != nil {
-		http.Error(rw, err.Error(), http.StatusNotFound)
+		log.Printf("Apollo Request failed: %s", err.Error())
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(rw, "Unable communicate with Apollo: %s", err.Error())
 		return
 	}
 
 	// Parse collection-level metadata from JSON response
 	err = parsers.GetMetadataFromJSON(&data, respStr)
 	if err != nil {
-		http.Error(rw, err.Error(), http.StatusBadRequest)
+		log.Printf("Unable to parse Apollo response: %s", err.Error())
+		rw.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(rw, "Unable to parse Apollo Metadata: %s", err.Error())
 		return
 	}
 
-	// Get metadata about masterfiles from the tracksys Manufest API
-	tsURL := fmt.Sprintf("%s/items/%s", viper.GetString("tracksys_api_url"), tsPID)
-	mfRespStr, err := getAPIResponse(tsURL)
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusNotFound)
-		return
-	}
+	// Get masterFiles from TrackSys manifest API
+	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
+	respStr, err = getAPIResponse(tsURL)
+	parsers.GetMasterFilesFromJSON(&data, "", respStr)
 
-	err = parsers.GetMasterFilesFromJSON(&data, mfRespStr)
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	fmt.Fprintf(rw, "hi")
+	renderIiifMetadata(data, rw)
 }
 
-/**
- * Generate the IIIF manifest for a METADATA record
- */
+// Generate the IIIF manifest for a METADATA record
 func generateFromMetadataRecord(data models.IIIF, rw http.ResponseWriter, unitID int) {
 	var metadataID int
 	var exemplar sql.NullString
@@ -241,56 +234,13 @@ func generateFromMetadataRecord(data models.IIIF, rw http.ResponseWriter, unitID
 		parsers.ParseSolrRecord(&data, metadataType)
 	}
 
-	// Get data for all master files from units associated with the metadata record
-	// The default query only gets master files for units that are in the DL. This
-	// can be overridden if a unit ID was specified or of the metadata is external. In these
-	// cases, don't care if unit is in DL or not
-	var qsBuff bytes.Buffer
-	qsBuff.WriteString("select m.pid, m.filename, m.title, m.description, t.width, t.height from master_files m")
-	qsBuff.WriteString(" inner join units u on u.id = m.unit_id")
-	qsBuff.WriteString(" inner join image_tech_meta t on m.id=t.master_file_id where m.metadata_id = ?")
+	// Get data for all master files from units associated with the metadata record. Include unit if specified
+	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
 	if unitID > 0 {
-		log.Printf("Only including masterfiles from unit %d", unitID)
-		qsBuff.WriteString(fmt.Sprintf(" and u.id=%d order by m.filename asc", unitID))
-	} else if strings.Compare(metadataType, "ExternalMetadata") == 0 {
-		log.Printf("This is External metadata; including all master files")
-		qsBuff.WriteString(" order by m.filename asc")
-	} else {
-		log.Printf("Only including masterfiles from units in the DL")
-		qsBuff.WriteString("  and u.include_in_dl = 1 order by m.filename asc")
+		tsURL = fmt.Sprintf("%s?unit=%d", tsURL, unitID)
 	}
-	rows, _ := db.Query(qsBuff.String(), metadataID)
-	defer rows.Close()
-	pgNum := 0
-	for rows.Next() {
-		var mf models.MasterFile
-		var mfFilename string
-		var mfTitle sql.NullString
-		var mfDesc sql.NullString
-		err = rows.Scan(&mf.PID, &mfFilename, &mfTitle, &mfDesc, &mf.Width, &mf.Height)
-		if err != nil {
-			log.Printf("Unable to retreive IIIF MasterFile metadata for %s: %s", data.MetadataPID, err.Error())
-			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
-			return
-		}
-		mf.Description = models.CleanString(mfDesc.String)
-		mf.Title = models.CleanString(mfTitle.String)
-
-		// If the metadata for this master file is XML, the MODS desc metadata in record overrides title and desc
-		if descMetadata.Valid && strings.Compare("XmlMetadata", metadataType) == 0 {
-			parsers.ParseMODS(&mf, descMetadata.String)
-		}
-		data.MasterFiles = append(data.MasterFiles, mf)
-
-		// if exemplar is set, see if it matches the current master file filename
-		// if it does, set the current page num as the start canvas
-		if exemplar.Valid && strings.Compare(mfFilename, exemplar.String) == 0 {
-			data.StartPage = pgNum
-			data.ExemplarPID = mf.PID
-			log.Printf("Exemplar set to filename %s, page %d", mfFilename, data.StartPage)
-		}
-		pgNum++
-	}
+	respStr, err := getAPIResponse(tsURL)
+	parsers.GetMasterFilesFromJSON(&data, exemplar.String, respStr)
 	renderIiifMetadata(data, rw)
 }
 
@@ -309,45 +259,10 @@ func generateFromComponent(pid string, data models.IIIF, rw http.ResponseWriter)
 	}
 	data.Title = models.CleanString(cTitle.String)
 
-	// Get data for all master files attached to this component
-	pgNum := 0
-	qs = `select m.pid, m.filename, m.title, m.description, b.desc_metadata, t.width, t.height from master_files m
-         inner join metadata b on b.id = m.metadata_id
-	      inner join image_tech_meta t on m.id=t.master_file_id where m.component_id = ? order by m.filename asc`
-	rows, _ := db.Query(qs, componentID)
-	defer rows.Close()
-	for rows.Next() {
-		var mf models.MasterFile
-		var mfFilename string
-		var mfTitle sql.NullString
-		var mfDesc sql.NullString
-		var mfDescMetadata sql.NullString
-		err = rows.Scan(&mf.PID, &mfFilename, &mfTitle, &mfDesc, &mfDescMetadata, &mf.Width, &mf.Height)
-		if err != nil {
-			log.Printf("Unable to retreive IIIF MasterFile metadata for %s: %s", data.MetadataPID, err.Error())
-			fmt.Fprintf(rw, "Unable to retreive IIIF MasterFile metadata: %s", err.Error())
-			return
-		}
-		mf.Description = models.CleanString(mfDesc.String)
-		mf.Title = models.CleanString(mfTitle.String)
-
-		// MODS desc metadata in record overrides title and desc
-		if mfDescMetadata.Valid {
-			parsers.ParseMODS(&mf, mfDescMetadata.String)
-		}
-
-		data.MasterFiles = append(data.MasterFiles, mf)
-
-		// if exemplar is set, see if it matches the current master file filename
-		// if it does, set the current page num as the start canvas
-		if exemplar.Valid && strings.Compare(mfFilename, exemplar.String) == 0 {
-			data.StartPage = pgNum
-			data.ExemplarPID = mf.PID
-			log.Printf("Exemplar set to filename %s, page %d", mfFilename, data.StartPage)
-		}
-		pgNum++
-
-	}
+	// Get masterFiles from TrackSys manifest API that are hooked to this component
+	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), pid)
+	respStr, err := getAPIResponse(tsURL)
+	parsers.GetMasterFilesFromJSON(&data, exemplar.String, respStr)
 	renderIiifMetadata(data, rw)
 }
 

@@ -27,35 +27,6 @@ func parseMARC(data *models.IIIF, marc string) {
 	}
 }
 
-// ParseMODS will pull title and description from MODS string
-func ParseMODS(mfData *models.MasterFile, mods string) {
-	xmlRoot, err := xmlpath.Parse(strings.NewReader(mods))
-	if err != nil {
-		log.Printf("WARNING: Unable to parse MODS: %s; skipping", err.Error())
-		return
-	}
-	path := xmlpath.MustCompile("//titleInfo/title")
-	val, ok := path.String(xmlRoot)
-	if ok {
-		mfData.Title = models.CleanString(val)
-	}
-
-	// first try <abstract displayLabel="Description">
-	path = xmlpath.MustCompile("//abstract[@displayLabel='Description']")
-	val, ok = path.String(xmlRoot)
-	if ok {
-		mfData.Description = models.CleanString(val)
-		return
-	}
-
-	// .. next try for a provenance note
-	path = xmlpath.MustCompile("//note[@type='provenance' and @displayLabel='staff']")
-	val, ok = path.String(xmlRoot)
-	if ok {
-		mfData.Description = models.CleanString(fmt.Sprintf("Staff note: %s", val))
-	}
-}
-
 // ParseSolrRecord will parse XML solr index for format_facet and
 // published_display (sirsi) or year_display (xml)
 func ParseSolrRecord(data *models.IIIF, metadataType string) {

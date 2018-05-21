@@ -3,8 +3,8 @@ package parsers
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
+	"strings"
 
 	"github.com/uvalib/iiif-metadata-ws/internal/models"
 )
@@ -12,25 +12,22 @@ import (
 // GetMetadataFromJSON parses basic IIIF Metadata from an Apollo JSON API response
 func GetMetadataFromJSON(data *models.IIIF, jsonStr string) error {
 	// All of the data we care about is under the array of children
-	// found in the item key in the response. Unmarshall the string
+	// found in the collection key in the response. Unmarshall the string
 	// into arbitrary map and find the stuff needed:
 	//      title, catalogKey, callNumber, useRights
 	var jsonMap map[string]interface{}
 	json.Unmarshal([]byte(jsonStr), &jsonMap)
 
 	// NOTE: this is a type assertion. Basically a cast from
-	// the general interface{} to a specific type. As written below
-	// this will panic of the data is not found. Need to re-do like:
-	//      item, ok := jsonMap["item"].(map[string]interface{})
-	// and check the OK for errors
-	item, ok := jsonMap["item"].(map[string]interface{})
+	// the general interface{} to a specific type.
+	collection, ok := jsonMap["collection"].(map[string]interface{})
 	if !ok {
-		return errors.New("Unable to parse 'item' from response")
+		return errors.New("Unable to parse 'collection' from response")
 	}
 
-	children, ok := item["children"].([]interface{})
+	children, ok := collection["children"].([]interface{})
 	if !ok {
-		return errors.New("Unable to parse 'children' from response")
+		return errors.New("Unable to parse 'children' from collection response")
 	}
 
 	for _, c := range children {
@@ -39,8 +36,8 @@ func GetMetadataFromJSON(data *models.IIIF, jsonStr string) error {
 		child := c.(map[string]interface{})
 
 		// get the Name data for this node
-		nameAttr, ok := child["name"].(map[string]interface{})
-		if !ok {
+		nameAttr, okName := child["name"].(map[string]interface{})
+		if !okName {
 			return errors.New("Unable to parse 'name' from response")
 		}
 
@@ -63,11 +60,53 @@ func GetMetadataFromJSON(data *models.IIIF, jsonStr string) error {
 			data.License = child["valueURI"].(string)
 		}
 	}
+
+	// Add item-level title to the main title
+	item, ok := jsonMap["item"].(map[string]interface{})
+	if !ok {
+		return errors.New("Unable to parse 'item' from response")
+	}
+	children, oK := item["children"].([]interface{})
+	if !oK {
+		return errors.New("Unable to parse 'children' from item response")
+	}
+	for _, c := range children {
+		child := c.(map[string]interface{})
+		nameAttr := child["name"].(map[string]interface{})
+		val := nameAttr["value"].(string)
+		if strings.Compare(val, "title") == 0 {
+			data.Title = data.Title + ": " + child["value"].(string)
+		}
+	}
 	return nil
 }
 
-// GetMasterFilesFromJSON parses basic masmter file Metadata from a tracksys JSON API response
-func GetMasterFilesFromJSON(data *models.IIIF, jsonStr string) error {
-	fmt.Printf("%s", jsonStr)
-	return nil
+// GetMasterFilesFromJSON parses basic IIIF Metadata from an Apollo JSON API response
+func GetMasterFilesFromJSON(data *models.IIIF, exemplar string, jsonStr string) {
+	var jsonArray []interface{}
+	json.Unmarshal([]byte(jsonStr), &jsonArray)
+	pgNum := 0
+	for _, mfInterface := range jsonArray {
+		// Extract: pid, filename, width, height, title, description (optional)
+		mfJSON := mfInterface.(map[string]interface{})
+		var mf models.MasterFile
+		mf.PID = mfJSON["pid"].(string)
+		mf.Width = int(mfJSON["width"].(float64))
+		mf.Height = int(mfJSON["height"].(float64))
+		mf.Title = models.CleanString(mfJSON["title"].(string))
+		if desc, ok := mfJSON["description"]; ok {
+			mf.Description = models.CleanString(desc.(string))
+		}
+		data.MasterFiles = append(data.MasterFiles, mf)
+
+		// if exemplar is set, see if it matches the current master file filename
+		// if it does, set the current page num as the start canvas
+		filename := mfJSON["filename"].(string)
+		if strings.Compare(filename, exemplar) == 0 {
+			data.StartPage = pgNum
+			data.ExemplarPID = mf.PID
+			log.Printf("Exemplar set to filename %s, page %d", filename, data.StartPage)
+		}
+		pgNum++
+	}
 }
