@@ -23,7 +23,7 @@ func parseMARC(data *models.IIIF, marc string) {
 	nodes := path.Iter(xmlRoot)
 	val := getArrayValues(nodes, " ")
 	if len(val) > 0 {
-		data.Metadata = append(data.Metadata, models.Metadata{"Physical Description", val})
+		data.Metadata["Physical Description"] = val
 	}
 }
 
@@ -73,7 +73,7 @@ func parseVirgoSolr(data *models.IIIF) {
 		}
 	}
 	if buffer.Len() > 0 {
-		data.Metadata = append(data.Metadata, models.Metadata{"Format", buffer.String()})
+		data.Metadata["Format"] = buffer.String()
 	}
 
 	// See if there is MARC data to parse for physical description
@@ -88,7 +88,7 @@ func parseVirgoSolr(data *models.IIIF) {
 	nodes = path.Iter(xmlRoot)
 	date := getArrayValues(nodes, ", ")
 	if len(date) > 0 {
-		data.Metadata = append(data.Metadata, models.Metadata{"Date", date})
+		data.Metadata["Date"] = date
 		return
 	}
 }
@@ -128,23 +128,25 @@ func parseTracksysSolr(data *models.IIIF) {
 		}
 	}
 	if buffer.Len() > 0 {
-		data.Metadata = append(data.Metadata, models.Metadata{"Format", buffer.String()})
+		data.Metadata["Format"] = buffer.String()
 	}
 
 	// Pull the Author from author_display
 	path = xmlpath.MustCompile("//field[@name='author_display']")
 	val, ok := path.String(xmlRoot)
 	if ok {
-		data.Metadata = append(data.Metadata, models.Metadata{"Author", val})
+		data.Metadata["Author"] = val
 	}
 
 	// Pull the Date from year_display
 	path = xmlpath.MustCompile("//field[@name='year_display']")
 	val, ok = path.String(xmlRoot)
 	if ok {
-		data.Metadata = append(data.Metadata, models.Metadata{"Date", val})
+		data.Metadata["Date"] = val
 	}
 }
+
+// TODO Fix IIIF Json template to use map instead of array of metadata objects
 
 func getArrayValues(nodes *xmlpath.Iter, sep string) string {
 	var buffer bytes.Buffer

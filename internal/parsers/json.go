@@ -54,7 +54,7 @@ func GetMetadataFromJSON(data *models.IIIF, jsonStr string) error {
 		case "callNumber":
 			callNum := child["value"].(string)
 			log.Printf("callNumber: %s", callNum)
-			data.Metadata = append(data.Metadata, models.Metadata{"Call Number", callNum})
+			data.Metadata["Call Number"] = callNum
 		case "useRights":
 			log.Printf("license: %s", child["valueURI"].(string))
 			data.License = child["valueURI"].(string)

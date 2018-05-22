@@ -8,10 +8,7 @@
    "label":"{{.Title}}",
    {{- if .Metadata}}
    "metadata": [
-      {{- range $index, $element := .Metadata -}}
-      {{- if $index}},{{end -}}
-      {"label":"{{.Name}}", "value":"{{.Value}}"}
-      {{- end}}
+      {{.JoinMetadata}}
    ],
    {{- end}}
    "license":"{{.License}}",

@@ -2,7 +2,9 @@
 // generate the JSON response; masterFile, metadata and iiifData
 package models
 
-import "strings"
+import (
+	"strings"
+)
 
 // MasterFile defines the metadata required to describe an image file
 type MasterFile struct {
@@ -11,12 +13,6 @@ type MasterFile struct {
 	Description string
 	Width       int
 	Height      int
-}
-
-// Metadata is a key/value pair for basic metadat
-type Metadata struct {
-	Name  string
-	Value string
 }
 
 // IIIF coontains all of the data necessary to render an IIIF manifest
@@ -31,8 +27,23 @@ type IIIF struct {
 	ExemplarPID string
 	License     string
 	Related     string
-	Metadata    []Metadata
+	Metadata    map[string]string
 	MasterFiles []MasterFile
+}
+
+// JoinMetadata takes the Metadata map and joins it
+// into a JSON friendly string of the format:
+//    {"label": "$KEY", "value": "$VAL"}, ...
+//    with each ele separated by a comma
+func (iiif IIIF) JoinMetadata() string {
+	var out string
+	for k, v := range iiif.Metadata {
+		if len(out) > 0 {
+			out = out + ", "
+		}
+		out = out + "{\"label\": \"" + k + "\", \"value\": \"" + v + "\"}"
+	}
+	return out
 }
 
 // CleanString removes invalid characters from a string

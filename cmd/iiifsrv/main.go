@@ -4,13 +4,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"html/template"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -107,6 +107,7 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 	data.IiifURL = viper.GetString("iiif_url")
 	data.VirgoURL = viper.GetString("virgo_url")
 	data.MetadataPID = pid
+	data.Metadata = make(map[string]string)
 
 	// Tracksys is the system that tracks items that contain
 	// masterfiles. All pids the arrive at the IIIF service should
@@ -197,18 +198,16 @@ func generateFromApollo(data models.IIIF, rw http.ResponseWriter) {
 
 // Generate the IIIF manifest for a METADATA record
 func generateFromMetadataRecord(data models.IIIF, rw http.ResponseWriter, unitID int) {
-	var metadataID int
 	var exemplar sql.NullString
-	var descMetadata sql.NullString
 	var author sql.NullString
 	var metadataType string
 	var catalogKey sql.NullString
 	var callNumber sql.NullString
 
-	qs := `select m.id, m.title, creator_name, catalog_key, call_number, exemplar, type, desc_metadata, u.uri from metadata m
+	qs := `select m.title, creator_name, catalog_key, call_number, exemplar, type, u.uri from metadata m
           inner join use_rights u on u.id = use_right_id where pid=?`
 	err := db.QueryRow(qs, data.MetadataPID).Scan(
-		&metadataID, &data.Title, &author, &catalogKey, &callNumber, &exemplar, &metadataType, &descMetadata, &data.License)
+		&data.Title, &author, &catalogKey, &callNumber, &exemplar, &metadataType, &data.License)
 	if err != nil {
 		log.Printf("Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusBadRequest)
@@ -217,7 +216,7 @@ func generateFromMetadataRecord(data models.IIIF, rw http.ResponseWriter, unitID
 	}
 
 	if callNumber.Valid {
-		data.Metadata = append(data.Metadata, models.Metadata{"Call Number", callNumber.String})
+		data.Metadata["Call Number"] = callNumber.String
 	}
 	data.VirgoKey = data.MetadataPID
 	if catalogKey.Valid {
@@ -227,7 +226,7 @@ func generateFromMetadataRecord(data models.IIIF, rw http.ResponseWriter, unitID
 	// only take the author field from the DB for SirsiMetadata. For
 	// XmlMetadata, the field needs to be pulled from the author_display of solr
 	if author.Valid && strings.Compare(metadataType, "SirsiMetadata") == 0 {
-		data.Metadata = append(data.Metadata, models.Metadata{"Author", author.String})
+		data.Metadata["Author"] = author.String
 	}
 
 	if strings.Compare(metadataType, "ExternalMetadata") != 0 {
@@ -246,11 +245,10 @@ func generateFromMetadataRecord(data models.IIIF, rw http.ResponseWriter, unitID
 
 func generateFromComponent(pid string, data models.IIIF, rw http.ResponseWriter) {
 	// grab all of the masterfiles hooked to this component
-	var componentID int
 	var exemplar sql.NullString
 	var cTitle sql.NullString
-	qs := `select id, title, exemplar from components where pid=?`
-	err := db.QueryRow(qs, pid).Scan(&componentID, &cTitle, &exemplar)
+	qs := `select title, exemplar from components where pid=?`
+	err := db.QueryRow(qs, pid).Scan(&cTitle, &exemplar)
 	if err != nil {
 		log.Printf("Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusBadRequest)
@@ -267,7 +265,7 @@ func generateFromComponent(pid string, data models.IIIF, rw http.ResponseWriter)
 }
 
 func renderIiifMetadata(data models.IIIF, rw http.ResponseWriter) {
-	// rw.Header().Set("content-type", "application/json; charset=utf-8")
+	rw.Header().Set("content-type", "application/json; charset=utf-8")
 	tmpl := template.Must(template.ParseFiles("templates/iiif.json"))
 	err := tmpl.ExecuteTemplate(rw, "iiif.json", data)
 	if err != nil {
