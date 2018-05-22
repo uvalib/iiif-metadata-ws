@@ -123,7 +123,7 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 
 	if pidType == "sirsi_metadata" {
 		log.Printf("%s is a sirsi metadata record", pid)
-		generateFromMetadataRecord(data, rw, unitID)
+		generateFromSirsi(data, rw, unitID)
 	} else if pidType == "xml_metadata" {
 		log.Printf("%s is an xml metadata record", pid)
 		generateFromXML(data, rw)
@@ -196,15 +196,11 @@ func generateFromApollo(data models.IIIF, rw http.ResponseWriter) {
 	renderIiifMetadata(data, rw)
 }
 
-// Generate the IIIF manifest from TrackSys XML Metadata
-func generateFromXML(data models.IIIF, rw http.ResponseWriter) {
+func getTrackSysMetadata(data *models.IIIF) (string, error) {
 	tsURL := fmt.Sprintf("%s/metadata/%s?type=brief", viper.GetString("tracksys_api_url"), data.MetadataPID)
 	respStr, err := getAPIResponse(tsURL)
 	if err != nil {
-		log.Printf("Tracksys metadata Request failed: %s", err.Error())
-		rw.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprintf(rw, "Unable communicate with TrackSys: %s", err.Error())
-		return
+		return "", err
 	}
 
 	// unmarshall into struct
@@ -224,13 +220,47 @@ func generateFromXML(data models.IIIF, rw http.ResponseWriter) {
 	if len(tsMetadata.Creator) > 0 {
 		data.Metadata["Author"] = tsMetadata.Creator
 	}
+	return tsMetadata.Exemplar, nil
+}
+
+// Generate the IIIF manifest from TrackSys XML Metadata
+func generateFromXML(data models.IIIF, rw http.ResponseWriter) {
+	exemplar, err := getTrackSysMetadata(&data)
+	if err != nil {
+		log.Printf("Tracksys metadata Request failed: %s", err.Error())
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(rw, "Unable retrieve metadata: %s", err.Error())
+		return
+	}
 
 	parsers.ParseSolrRecord(&data, "XmlMetadata")
 
 	// Get masterFiles from TrackSys manifest API that are hooked to this component
-	tsURL = fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
-	respStr, err = getAPIResponse(tsURL)
-	parsers.GetMasterFilesFromJSON(&data, tsMetadata.Exemplar, respStr)
+	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
+	respStr, err := getAPIResponse(tsURL)
+	parsers.GetMasterFilesFromJSON(&data, exemplar, respStr)
+	renderIiifMetadata(data, rw)
+}
+
+// Generate the IIIF manifest for a METADATA record
+func generateFromSirsi(data models.IIIF, rw http.ResponseWriter, unitID int) {
+	exemplar, err := getTrackSysMetadata(&data)
+	if err != nil {
+		log.Printf("Tracksys metadata Request failed: %s", err.Error())
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(rw, "Unable retrieve metadata: %s", err.Error())
+		return
+	}
+
+	parsers.ParseSolrRecord(&data, "SirsiMetadata")
+
+	// Get data for all master files from units associated with the metadata record. Include unit if specified
+	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
+	if unitID > 0 {
+		tsURL = fmt.Sprintf("%s?unit=%d", tsURL, unitID)
+	}
+	respStr, err := getAPIResponse(tsURL)
+	parsers.GetMasterFilesFromJSON(&data, exemplar, respStr)
 	renderIiifMetadata(data, rw)
 }
 
