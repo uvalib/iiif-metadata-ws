@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +13,6 @@ import (
 	"text/template"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/cors"
 	"github.com/spf13/viper"
@@ -22,10 +20,7 @@ import (
 	"github.com/uvalib/iiif-metadata-ws/internal/parsers"
 )
 
-const version = "1.8.0"
-
-// globals to share between main and the HTTP handler
-var db *sql.DB
+const version = "2.0.0"
 
 /**
  * Main entry point for the web service
@@ -41,17 +36,6 @@ func main() {
 		fmt.Printf("Unable to read config: %s", err.Error())
 		os.Exit(1)
 	}
-
-	// Init DB connection
-	log.Printf("Init DB connection to %s...", viper.GetString("db_host"))
-	connectStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", viper.GetString("db_user"), viper.GetString("db_pass"),
-		viper.GetString("db_host"), viper.GetString("db_name"))
-	db, err = sql.Open("mysql", connectStr)
-	if err != nil {
-		fmt.Printf("Database connection failed: %s", err.Error())
-		os.Exit(1)
-	}
-	defer db.Close()
 
 	// Set routes and start server
 	mux := httprouter.New()
@@ -131,9 +115,8 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 		log.Printf("%s is an apollo metadata record", pid)
 		generateFromApollo(data, rw)
 	} else if pidType == "archivesspace_metadata" {
-		// FIXME split logic
 		log.Printf("%s is an as metadata record", pid)
-		generateFromMetadataRecord(data, rw, unitID)
+		generateFromExternal(data, rw)
 	} else if pidType == "component" {
 		log.Printf("%s is a component", pid)
 		generateFromComponent(pid, data, rw)
@@ -265,70 +248,35 @@ func generateFromSirsi(data models.IIIF, rw http.ResponseWriter, unitID int) {
 }
 
 // Generate the IIIF manifest for a METADATA record
-func generateFromMetadataRecord(data models.IIIF, rw http.ResponseWriter, unitID int) {
-	var exemplar sql.NullString
-	var author sql.NullString
-	var metadataType string
-	var catalogKey sql.NullString
-	var callNumber sql.NullString
-
-	qs := `select m.title, creator_name, catalog_key, call_number, exemplar, type, u.uri from metadata m
-          inner join use_rights u on u.id = use_right_id where pid=?`
-	err := db.QueryRow(qs, data.MetadataPID).Scan(
-		&data.Title, &author, &catalogKey, &callNumber, &exemplar, &metadataType, &data.License)
+func generateFromExternal(data models.IIIF, rw http.ResponseWriter) {
+	exemplar, err := getTrackSysMetadata(&data)
 	if err != nil {
-		log.Printf("Request failed: %s", err.Error())
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
+		log.Printf("Tracksys metadata Request failed: %s", err.Error())
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(rw, "Unable retrieve metadata: %s", err.Error())
 		return
-	}
-
-	if callNumber.Valid {
-		data.Metadata["Call Number"] = callNumber.String
-	}
-	data.VirgoKey = data.MetadataPID
-	if catalogKey.Valid {
-		data.VirgoKey = catalogKey.String
-	}
-
-	// only take the author field from the DB for SirsiMetadata. For
-	// XmlMetadata, the field needs to be pulled from the author_display of solr
-	if author.Valid && strings.Compare(metadataType, "SirsiMetadata") == 0 {
-		data.Metadata["Author"] = author.String
-	}
-
-	if strings.Compare(metadataType, "ExternalMetadata") != 0 {
-		parsers.ParseSolrRecord(&data, metadataType)
 	}
 
 	// Get data for all master files from units associated with the metadata record. Include unit if specified
 	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
-	if unitID > 0 {
-		tsURL = fmt.Sprintf("%s?unit=%d", tsURL, unitID)
-	}
 	respStr, err := getAPIResponse(tsURL)
-	parsers.GetMasterFilesFromJSON(&data, exemplar.String, respStr)
+	parsers.GetMasterFilesFromJSON(&data, exemplar, respStr)
 	renderIiifMetadata(data, rw)
 }
 
 func generateFromComponent(pid string, data models.IIIF, rw http.ResponseWriter) {
-	// grab all of the masterfiles hooked to this component
-	var exemplar sql.NullString
-	var cTitle sql.NullString
-	qs := `select title, exemplar from components where pid=?`
-	err := db.QueryRow(qs, pid).Scan(&cTitle, &exemplar)
+	exemplar, err := getTrackSysMetadata(&data)
 	if err != nil {
-		log.Printf("Request failed: %s", err.Error())
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "Unable to retreive IIIF metadata: %s", err.Error())
+		log.Printf("Tracksys metadata Request failed: %s", err.Error())
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(rw, "Unable retrieve metadata: %s", err.Error())
 		return
 	}
-	data.Title = models.CleanString(cTitle.String)
 
 	// Get masterFiles from TrackSys manifest API that are hooked to this component
 	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), pid)
 	respStr, err := getAPIResponse(tsURL)
-	parsers.GetMasterFilesFromJSON(&data, exemplar.String, respStr)
+	parsers.GetMasterFilesFromJSON(&data, exemplar, respStr)
 	renderIiifMetadata(data, rw)
 }
 

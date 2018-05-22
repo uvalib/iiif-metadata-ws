@@ -30,6 +30,7 @@ func parseMARC(data *models.IIIF, marc string) {
 // ParseSolrRecord will parse XML solr index for format_facet and
 // published_display (sirsi) or year_display (xml)
 func ParseSolrRecord(data *models.IIIF, metadataType string) {
+	log.Printf("Parse Solr for %s", metadataType)
 	if strings.Compare(metadataType, "SirsiMetadata") == 0 {
 		parseVirgoSolr(data)
 	} else {
@@ -95,7 +96,7 @@ func parseVirgoSolr(data *models.IIIF) {
 
 func parseTracksysSolr(data *models.IIIF) {
 	// For XML metadata
-	solrURL := fmt.Sprintf("%s/%s?no_external=1", viper.GetString("tracksys_solr_url"), data.MetadataPID)
+	solrURL := fmt.Sprintf("%s/solr/%s?no_external=1", viper.GetString("tracksys_api_url"), data.MetadataPID)
 	log.Printf("Get Solr record from %s...", solrURL)
 	resp, err := http.Get(solrURL)
 	if err != nil {
