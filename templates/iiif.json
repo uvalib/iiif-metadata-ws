@@ -7,9 +7,7 @@
    {{- end}}
    "label":"{{.Title}}",
    {{- if .Metadata}}
-   "metadata": [
-      {{.JoinMetadata}}
-   ],
+   "metadata": {{.JSONMetadata}},
    {{- end}}
    "license":"{{.License}}",
    "attribution":"Provided by the University of Virginia Library",

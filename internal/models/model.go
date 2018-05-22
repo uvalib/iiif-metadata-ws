@@ -6,6 +6,18 @@ import (
 	"strings"
 )
 
+// BriefMetadata defines the basic metadata for an item as
+// returned by the TrackSys brief metadata API call
+type BriefMetadata struct {
+	PID        string
+	Title      string
+	Creator    string
+	Rights     string
+	Exemplar   string
+	CatalogKey string
+	CallNumber string
+}
+
 // MasterFile defines the metadata required to describe an image file
 type MasterFile struct {
 	PID         string
@@ -31,18 +43,19 @@ type IIIF struct {
 	MasterFiles []MasterFile
 }
 
-// JoinMetadata takes the Metadata map and joins it
+// JSONMetadata takes the Metadata map and joins it
 // into a JSON friendly string of the format:
-//    {"label": "$KEY", "value": "$VAL"}, ...
+//    [ {"label": "$KEY", "value": "$VAL"}, {...} ]
 //    with each ele separated by a comma
-func (iiif IIIF) JoinMetadata() string {
-	var out string
+func (iiif IIIF) JSONMetadata() string {
+	out := "[ "
 	for k, v := range iiif.Metadata {
-		if len(out) > 0 {
+		if len(out) > 2 {
 			out = out + ", "
 		}
 		out = out + "{\"label\": \"" + k + "\", \"value\": \"" + v + "\"}"
 	}
+	out += " ]"
 	return out
 }
 

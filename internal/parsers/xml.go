@@ -146,8 +146,6 @@ func parseTracksysSolr(data *models.IIIF) {
 	}
 }
 
-// TODO Fix IIIF Json template to use map instead of array of metadata objects
-
 func getArrayValues(nodes *xmlpath.Iter, sep string) string {
 	var buffer bytes.Buffer
 	for nodes.Next() {

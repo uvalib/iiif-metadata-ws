@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -124,9 +125,8 @@ func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Pa
 		log.Printf("%s is a sirsi metadata record", pid)
 		generateFromMetadataRecord(data, rw, unitID)
 	} else if pidType == "xml_metadata" {
-		// FIXME split logic
 		log.Printf("%s is an xml metadata record", pid)
-		generateFromMetadataRecord(data, rw, unitID)
+		generateFromXML(data, rw)
 	} else if pidType == "apollo_metadata" {
 		log.Printf("%s is an apollo metadata record", pid)
 		generateFromApollo(data, rw)
@@ -193,6 +193,44 @@ func generateFromApollo(data models.IIIF, rw http.ResponseWriter) {
 	respStr, err = getAPIResponse(tsURL)
 	parsers.GetMasterFilesFromJSON(&data, "", respStr)
 
+	renderIiifMetadata(data, rw)
+}
+
+// Generate the IIIF manifest from TrackSys XML Metadata
+func generateFromXML(data models.IIIF, rw http.ResponseWriter) {
+	tsURL := fmt.Sprintf("%s/metadata/%s?type=brief", viper.GetString("tracksys_api_url"), data.MetadataPID)
+	respStr, err := getAPIResponse(tsURL)
+	if err != nil {
+		log.Printf("Tracksys metadata Request failed: %s", err.Error())
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(rw, "Unable communicate with TrackSys: %s", err.Error())
+		return
+	}
+
+	// unmarshall into struct
+	var tsMetadata models.BriefMetadata
+	json.Unmarshal([]byte(respStr), &tsMetadata)
+
+	// Move ths data into the IIIF struct
+	data.Title = tsMetadata.Title
+	data.License = tsMetadata.Rights
+	data.VirgoKey = data.MetadataPID
+	if len(tsMetadata.CallNumber) > 0 {
+		data.Metadata["Call Number"] = tsMetadata.CallNumber
+	}
+	if len(tsMetadata.CatalogKey) > 0 {
+		data.VirgoKey = tsMetadata.CatalogKey
+	}
+	if len(tsMetadata.Creator) > 0 {
+		data.Metadata["Author"] = tsMetadata.Creator
+	}
+
+	parsers.ParseSolrRecord(&data, "XmlMetadata")
+
+	// Get masterFiles from TrackSys manifest API that are hooked to this component
+	tsURL = fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
+	respStr, err = getAPIResponse(tsURL)
+	parsers.GetMasterFilesFromJSON(&data, tsMetadata.Exemplar, respStr)
 	renderIiifMetadata(data, rw)
 }
 
