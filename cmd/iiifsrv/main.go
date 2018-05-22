@@ -145,7 +145,7 @@ func getAPIResponse(url string) (string, error) {
 func generateFromApollo(data models.IIIF, rw http.ResponseWriter) {
 	// Get the Apollo PID
 	PID := data.MetadataPID
-	apolloURL := fmt.Sprintf("%s/legacy/lookup/%s", viper.GetString("apollo_api_url"), data.MetadataPID)
+	apolloURL := fmt.Sprintf("%s/external/%s", viper.GetString("apollo_api_url"), data.MetadataPID)
 	respStr, err := getAPIResponse(apolloURL)
 	if err == nil {
 		PID = respStr
