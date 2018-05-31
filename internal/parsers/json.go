@@ -93,7 +93,9 @@ func GetMasterFilesFromJSON(data *models.IIIF, exemplar string, jsonStr string) 
 		mf.PID = mfJSON["pid"].(string)
 		mf.Width = int(mfJSON["width"].(float64))
 		mf.Height = int(mfJSON["height"].(float64))
-		mf.Title = models.CleanString(mfJSON["title"].(string))
+		if title, ok := mfJSON["title"]; ok {
+			mf.Title = models.CleanString(title.(string))
+		}
 		if desc, ok := mfJSON["description"]; ok {
 			mf.Description = models.CleanString(desc.(string))
 		}

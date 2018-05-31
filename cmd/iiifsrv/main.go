@@ -20,7 +20,7 @@ import (
 	"github.com/uvalib/iiif-metadata-ws/internal/parsers"
 )
 
-const version = "2.0.0"
+const version = "2.0.1"
 
 /**
  * Main entry point for the web service
