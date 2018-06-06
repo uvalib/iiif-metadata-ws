@@ -65,6 +65,7 @@ func CleanString(str string) string {
 	safe = strings.Replace(safe, "\r", " ", -1)    /* escape for json */
 	safe = strings.Replace(safe, "\t", " ", -1)    /* escape for json */
 	safe = strings.Replace(safe, "\\", "\\\\", -1) /* escape for json */
+	safe = strings.Replace(safe, "\"", "\\\"", -1) /* escape for json */
 	safe = strings.Replace(safe, "\x0C", "", -1)   /* illegal in XML */
 	return safe
 }
