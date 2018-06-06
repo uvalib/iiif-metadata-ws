@@ -36,14 +36,14 @@ func GetMetadataFromJSON(data *models.IIIF, jsonStr string) error {
 		child := c.(map[string]interface{})
 
 		// get the Name data for this node
-		nameAttr, okName := child["name"].(map[string]interface{})
+		typeAttr, okName := child["type"].(map[string]interface{})
 		if !okName {
-			return errors.New("Unable to parse 'name' from response")
+			return errors.New("Unable to parse 'type' from response")
 		}
 
 		// all names have a value; pick the ones we want ang get the
 		// value attribute from the child, Store it in the IIIF data
-		switch val := nameAttr["value"].(string); val {
+		switch val := typeAttr["name"].(string); val {
 		case "title":
 			log.Printf("title:%s", child["value"].(string))
 			data.Title = models.CleanString(child["value"].(string))
@@ -72,8 +72,8 @@ func GetMetadataFromJSON(data *models.IIIF, jsonStr string) error {
 	}
 	for _, c := range children {
 		child := c.(map[string]interface{})
-		nameAttr := child["name"].(map[string]interface{})
-		val := nameAttr["value"].(string)
+		typeAttr := child["type"].(map[string]interface{})
+		val := typeAttr["name"].(string)
 		if strings.Compare(val, "title") == 0 {
 			data.Title = data.Title + ": " + child["value"].(string)
 		}
