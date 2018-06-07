@@ -75,7 +75,7 @@ func GetMetadataFromJSON(data *models.IIIF, jsonStr string) error {
 		typeAttr := child["type"].(map[string]interface{})
 		val := typeAttr["name"].(string)
 		if strings.Compare(val, "title") == 0 {
-			data.Title = data.Title + ": " + child["value"].(string)
+			data.Title = models.CleanString(data.Title + ": " + child["value"].(string))
 		}
 	}
 	return nil

@@ -23,7 +23,7 @@ func parseMARC(data *models.IIIF, marc string) {
 	nodes := path.Iter(xmlRoot)
 	val := getArrayValues(nodes, " ")
 	if len(val) > 0 {
-		data.Metadata["Physical Description"] = val
+		data.Metadata["Physical Description"] = models.CleanString(val)
 	}
 }
 

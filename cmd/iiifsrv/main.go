@@ -20,7 +20,7 @@ import (
 	"github.com/uvalib/iiif-metadata-ws/internal/parsers"
 )
 
-const version = "2.0.3"
+const version = "2.0.4"
 
 /**
  * Main entry point for the web service
@@ -191,7 +191,7 @@ func getTrackSysMetadata(data *models.IIIF) (string, error) {
 	json.Unmarshal([]byte(respStr), &tsMetadata)
 
 	// Move ths data into the IIIF struct
-	data.Title = tsMetadata.Title
+	data.Title = models.CleanString(tsMetadata.Title)
 	data.License = tsMetadata.Rights
 	data.VirgoKey = data.MetadataPID
 	if len(tsMetadata.CallNumber) > 0 {
@@ -201,7 +201,7 @@ func getTrackSysMetadata(data *models.IIIF) (string, error) {
 		data.VirgoKey = tsMetadata.CatalogKey
 	}
 	if len(tsMetadata.Creator) > 0 {
-		data.Metadata["Author"] = tsMetadata.Creator
+		data.Metadata["Author"] = models.CleanString(tsMetadata.Creator)
 	}
 	return tsMetadata.Exemplar, nil
 }
