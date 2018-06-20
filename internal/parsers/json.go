@@ -82,7 +82,7 @@ func GetMetadataFromJSON(data *models.IIIF, jsonStr string) error {
 }
 
 // GetMasterFilesFromJSON parses basic IIIF Metadata from an Apollo JSON API response
-func GetMasterFilesFromJSON(data *models.IIIF, exemplar string, jsonStr string) {
+func GetMasterFilesFromJSON(data *models.IIIF, jsonStr string) {
 	var jsonArray []interface{}
 	json.Unmarshal([]byte(jsonStr), &jsonArray)
 	pgNum := 0
@@ -104,7 +104,7 @@ func GetMasterFilesFromJSON(data *models.IIIF, exemplar string, jsonStr string) 
 		// if exemplar is set, see if it matches the current master file filename
 		// if it does, set the current page num as the start canvas
 		filename := mfJSON["filename"].(string)
-		if strings.Compare(filename, exemplar) == 0 {
+		if mfJSON["exemplar"] != nil {
 			data.StartPage = pgNum
 			data.ExemplarPID = mf.PID
 			log.Printf("Exemplar set to filename %s, page %d", filename, data.StartPage)

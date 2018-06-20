@@ -20,7 +20,7 @@ import (
 	"github.com/uvalib/iiif-metadata-ws/internal/parsers"
 )
 
-const version = "2.0.4"
+const version = "2.1.0"
 
 /**
  * Main entry point for the web service
@@ -174,16 +174,16 @@ func generateFromApollo(data models.IIIF, rw http.ResponseWriter) {
 	// Get masterFiles from TrackSys manifest API
 	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
 	respStr, err = getAPIResponse(tsURL)
-	parsers.GetMasterFilesFromJSON(&data, "", respStr)
+	parsers.GetMasterFilesFromJSON(&data, respStr)
 
 	renderIiifMetadata(data, rw)
 }
 
-func getTrackSysMetadata(data *models.IIIF) (string, error) {
+func getTrackSysMetadata(data *models.IIIF) error {
 	tsURL := fmt.Sprintf("%s/metadata/%s?type=brief", viper.GetString("tracksys_api_url"), data.MetadataPID)
 	respStr, err := getAPIResponse(tsURL)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// unmarshall into struct
@@ -203,12 +203,12 @@ func getTrackSysMetadata(data *models.IIIF) (string, error) {
 	if len(tsMetadata.Creator) > 0 {
 		data.Metadata["Author"] = models.CleanString(tsMetadata.Creator)
 	}
-	return tsMetadata.Exemplar, nil
+	return nil
 }
 
 // Generate the IIIF manifest from TrackSys XML Metadata
 func generateFromXML(data models.IIIF, rw http.ResponseWriter) {
-	exemplar, err := getTrackSysMetadata(&data)
+	err := getTrackSysMetadata(&data)
 	if err != nil {
 		log.Printf("Tracksys metadata Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusServiceUnavailable)
@@ -221,13 +221,13 @@ func generateFromXML(data models.IIIF, rw http.ResponseWriter) {
 	// Get masterFiles from TrackSys manifest API that are hooked to this component
 	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
 	respStr, err := getAPIResponse(tsURL)
-	parsers.GetMasterFilesFromJSON(&data, exemplar, respStr)
+	parsers.GetMasterFilesFromJSON(&data, respStr)
 	renderIiifMetadata(data, rw)
 }
 
 // Generate the IIIF manifest for a METADATA record
 func generateFromSirsi(data models.IIIF, rw http.ResponseWriter, unitID int) {
-	exemplar, err := getTrackSysMetadata(&data)
+	err := getTrackSysMetadata(&data)
 	if err != nil {
 		log.Printf("Tracksys metadata Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusServiceUnavailable)
@@ -243,13 +243,13 @@ func generateFromSirsi(data models.IIIF, rw http.ResponseWriter, unitID int) {
 		tsURL = fmt.Sprintf("%s?unit=%d", tsURL, unitID)
 	}
 	respStr, err := getAPIResponse(tsURL)
-	parsers.GetMasterFilesFromJSON(&data, exemplar, respStr)
+	parsers.GetMasterFilesFromJSON(&data, respStr)
 	renderIiifMetadata(data, rw)
 }
 
 // Generate the IIIF manifest for a METADATA record
 func generateFromExternal(data models.IIIF, rw http.ResponseWriter) {
-	exemplar, err := getTrackSysMetadata(&data)
+	err := getTrackSysMetadata(&data)
 	if err != nil {
 		log.Printf("Tracksys metadata Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusServiceUnavailable)
@@ -260,12 +260,12 @@ func generateFromExternal(data models.IIIF, rw http.ResponseWriter) {
 	// Get data for all master files from units associated with the metadata record. Include unit if specified
 	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
 	respStr, err := getAPIResponse(tsURL)
-	parsers.GetMasterFilesFromJSON(&data, exemplar, respStr)
+	parsers.GetMasterFilesFromJSON(&data, respStr)
 	renderIiifMetadata(data, rw)
 }
 
 func generateFromComponent(pid string, data models.IIIF, rw http.ResponseWriter) {
-	exemplar, err := getTrackSysMetadata(&data)
+	err := getTrackSysMetadata(&data)
 	if err != nil {
 		log.Printf("Tracksys metadata Request failed: %s", err.Error())
 		rw.WriteHeader(http.StatusServiceUnavailable)
@@ -276,7 +276,7 @@ func generateFromComponent(pid string, data models.IIIF, rw http.ResponseWriter)
 	// Get masterFiles from TrackSys manifest API that are hooked to this component
 	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), pid)
 	respStr, err := getAPIResponse(tsURL)
-	parsers.GetMasterFilesFromJSON(&data, exemplar, respStr)
+	parsers.GetMasterFilesFromJSON(&data, respStr)
 	renderIiifMetadata(data, rw)
 }
 
