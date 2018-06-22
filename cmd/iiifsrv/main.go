@@ -143,32 +143,43 @@ func getAPIResponse(url string) (string, error) {
 
 // Generate the IIIF manifest from data found in Apollo
 func generateFromApollo(data models.IIIF, rw http.ResponseWriter) {
-	// Get the Apollo PID
+	// Get the Apollo PID. Note In some cases there may not yet be an
+	// Apollo record created. If this happens, fall back on the basic
+	// metadata that is available in TrackSys
 	PID := data.MetadataPID
 	apolloURL := fmt.Sprintf("%s/external/%s", viper.GetString("apollo_api_url"), data.MetadataPID)
 	respStr, err := getAPIResponse(apolloURL)
 	if err == nil {
 		PID = respStr
 		log.Printf("Converted Tracksys PID %s to Apollo PID %s", data.MetadataPID, PID)
-	}
 
-	// Get some metadata about the collection from Apollo API...
-	apolloURL = fmt.Sprintf("%s/items/%s", viper.GetString("apollo_api_url"), PID)
-	respStr, err = getAPIResponse(apolloURL)
-	if err != nil {
-		log.Printf("Apollo Request failed: %s", err.Error())
-		rw.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprintf(rw, "Unable communicate with Apollo: %s", err.Error())
-		return
-	}
+		// Get some metadata about the collection from Apollo API...
+		apolloURL = fmt.Sprintf("%s/items/%s", viper.GetString("apollo_api_url"), PID)
+		respStr, err = getAPIResponse(apolloURL)
+		if err != nil {
+			log.Printf("Apollo Request failed: %s", err.Error())
+			rw.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprintf(rw, "Unable communicate with Apollo: %s", err.Error())
+			return
+		}
 
-	// Parse collection-level metadata from JSON response
-	err = parsers.GetMetadataFromJSON(&data, respStr)
-	if err != nil {
-		log.Printf("Unable to parse Apollo response: %s", err.Error())
-		rw.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprintf(rw, "Unable to parse Apollo Metadata: %s", err.Error())
-		return
+		// Parse collection-level metadata from JSON response
+		err = parsers.GetMetadataFromJSON(&data, respStr)
+		if err != nil {
+			log.Printf("Unable to parse Apollo response: %s", err.Error())
+			rw.WriteHeader(http.StatusUnprocessableEntity)
+			fmt.Fprintf(rw, "Unable to parse Apollo Metadata: %s", err.Error())
+			return
+		}
+	} else {
+		log.Printf("Unable to convert PID %s to Apollo PID; get minimal metadata from TrackSys", PID)
+		err := getTrackSysMetadata(&data)
+		if err != nil {
+			log.Printf("Tracksys metadata Request for Apollo item failed: %s", err.Error())
+			rw.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprintf(rw, "Unable retrieve metadata: %s", err.Error())
+			return
+		}
 	}
 
 	// Get masterFiles from TrackSys manifest API
