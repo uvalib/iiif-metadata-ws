@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/spf13/viper"
 	"github.com/uvalib/iiif-metadata-ws/internal/models"
 	xmlpath "gopkg.in/xmlpath.v2"
 )
@@ -27,19 +26,9 @@ func parseMARC(data *models.IIIF, marc string) {
 	}
 }
 
-// ParseSolrRecord will parse XML solr index for format_facet and
-// published_display (sirsi) or year_display (xml)
-func ParseSolrRecord(data *models.IIIF, metadataType string) {
-	log.Printf("Parse Solr for %s", metadataType)
-	if strings.Compare(metadataType, "SirsiMetadata") == 0 {
-		parseVirgoSolr(data)
-	} else {
-		parseTracksysSolr(data)
-	}
-}
-
-func parseVirgoSolr(data *models.IIIF) {
-	solrURL := fmt.Sprintf("%s/select?q=id:%s", viper.GetString("virgo_solr_url"), data.VirgoKey)
+// ParseVirgoSolr parse the solr record for the target item and extract relevant metadata elements
+func ParseVirgoSolr(virgoURL string, data *models.IIIF) {
+	solrURL := fmt.Sprintf("%s/select?q=id:%s", virgoURL, data.VirgoKey)
 	log.Printf("Get Solr record from %s...", solrURL)
 	resp, err := http.Get(solrURL)
 	if err != nil {
@@ -94,9 +83,10 @@ func parseVirgoSolr(data *models.IIIF) {
 	}
 }
 
-func parseTracksysSolr(data *models.IIIF) {
+// ParseTracksysSolr will get the solr add record from TrackSys and parse it for metdata elements
+func ParseTracksysSolr(tracksysURL string, data *models.IIIF) {
 	// For XML metadata
-	solrURL := fmt.Sprintf("%s/solr/%s?no_external=1", viper.GetString("tracksys_api_url"), data.MetadataPID)
+	solrURL := fmt.Sprintf("%s/solr/%s?no_external=1", tracksysURL, data.MetadataPID)
 	log.Printf("Get Solr record from %s...", solrURL)
 	resp, err := http.Get(solrURL)
 	if err != nil {

@@ -29,6 +29,7 @@ type serviceConfig struct {
 	port        int
 	iiifURL     string
 	virgoURL    string
+	solrURL     string
 	tracksysURL string
 	apolloURL   string
 }
@@ -46,6 +47,7 @@ func main() {
 	flag.StringVar(&config.virgoURL, "virgo", "http://search.lib.virginia.edu/catalog", "Virgo URL")
 	flag.StringVar(&config.tracksysURL, "tracksys", "http://tracksys.lib.virginia.edu/api", "Tracksys URL")
 	flag.StringVar(&config.apolloURL, "apollo", "http://apollo.lib.virginia.edu/api", "Apollo URL")
+	flag.StringVar(&config.solrURL, "solr", "http://solr.lib.virginia.edu:8082/solr/core", "Virgo Solr URL")
 	flag.Parse()
 
 	gin.SetMode(gin.ReleaseMode)
@@ -196,7 +198,7 @@ func generateFromXML(data models.IIIF, c *gin.Context) {
 		return
 	}
 
-	parsers.ParseSolrRecord(&data, "XmlMetadata")
+	parsers.ParseTracksysSolr(config.tracksysURL, &data)
 
 	// Get masterFiles from TrackSys manifest API that are hooked to this component
 	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
@@ -214,7 +216,7 @@ func generateFromSirsi(data models.IIIF, c *gin.Context, unitID int) {
 		return
 	}
 
-	parsers.ParseSolrRecord(&data, "SirsiMetadata")
+	parsers.ParseVirgoSolr(config.solrURL, &data)
 
 	// Get data for all master files from units associated with the metadata record. Include unit if specified
 	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
