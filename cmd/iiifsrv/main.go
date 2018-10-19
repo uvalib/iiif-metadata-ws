@@ -1,134 +1,125 @@
 package main
 
 import (
+	// "encoding/json"
+	"bytes"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"text/template"
 	"time"
 
-	"github.com/julienschmidt/httprouter"
-	"github.com/rs/cors"
-	"github.com/spf13/viper"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 	"github.com/uvalib/iiif-metadata-ws/internal/models"
 	"github.com/uvalib/iiif-metadata-ws/internal/parsers"
 )
 
-const version = "2.2.0"
+// version of the service
+const version = "2.3.0"
+
+// configuratition data
+type serviceConfig struct {
+	port        int
+	iiifURL     string
+	virgoURL    string
+	tracksysURL string
+	apolloURL   string
+}
+
+var config = serviceConfig{}
 
 /**
  * Main entry point for the web service
  */
 func main() {
 	log.Printf("===> iiif-metadata-ws staring up <===")
-	log.Printf("Load configuration...")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	viper.AddConfigPath(".")
-	err := viper.ReadInConfig()
-	if err != nil {
-		fmt.Printf("Unable to read config: %s", err.Error())
-		os.Exit(1)
-	}
+
+	flag.IntVar(&config.port, "port", 8080, "Port to offer service on (default 8080)")
+	flag.StringVar(&config.iiifURL, "iiif", "https://iiif.lib.virginia.edu/iiif", "IIIF URL")
+	flag.StringVar(&config.virgoURL, "virgo", "http://search.lib.virginia.edu/catalog", "Virgo URL")
+	flag.StringVar(&config.tracksysURL, "tracksys", "http://tracksys.lib.virginia.edu/api", "Tracksys URL")
+	flag.StringVar(&config.apolloURL, "apollo", "http://apollo.lib.virginia.edu/api", "Apollo URL")
+	flag.Parse()
+
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.Default()
+	router.Use(cors.Default())
 
 	// Set routes and start server
-	mux := httprouter.New()
-	mux.GET("/", loggingHandler(rootHandler))
-	mux.GET("/:pid/manifest.json", loggingHandler(iiifHandler))
-	mux.GET("/:pid", loggingHandler(iiifHandler))
+	router.GET("/", rootHandler)
+	router.GET("/:pid/manifest.json", iiifHandler)
+	router.GET("/:pid", iiifHandler)
 
-	if viper.GetBool("https") == true {
-		crt := viper.GetString("ssl_crt")
-		key := viper.GetString("ssl_key")
-		log.Printf("Start HTTPS service on port %s", viper.GetString("port"))
-		log.Fatal(http.ListenAndServeTLS(":"+viper.GetString("port"), crt, key, cors.Default().Handler(mux)))
-	} else {
-		log.Printf("Start HTTP service on port %s", viper.GetString("port"))
-		log.Fatal(http.ListenAndServe(":"+viper.GetString("port"), cors.Default().Handler(mux)))
-	}
+	portStr := fmt.Sprintf(":%d", config.port)
+	log.Printf("Start HTTP service on port %s with CORS support enabled", portStr)
+	log.Fatal(router.Run(portStr))
 }
 
-/**
- * Function Adapter for httprouter handlers that will log start and complete info.
- * A bit different than usual looking adapter because of the httprouter library used. Foun
- * this code here:
- *   https://stackoverflow.com/questions/43964461/how-to-use-middlewares-when-using-julienschmidt-httprouter-in-golang
- */
-func loggingHandler(next httprouter.Handle) httprouter.Handle {
-	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		start := time.Now()
-		log.Printf("Started %s %s", req.Method, req.RequestURI)
-		next(w, req, ps)
-		log.Printf("Completed %s %s in %s", req.Method, req.RequestURI, time.Since(start))
-	}
+// rootHandler returns the version of the service
+func rootHandler(c *gin.Context) {
+	c.String(http.StatusOK, "IIIF metadata service version %s", version)
 }
 
-/**
- * Handle a request for /
- */
-func rootHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Params) {
-	fmt.Fprintf(rw, "IIIF metadata service version %s", version)
-}
-
-/**
- * Handle a request for IIIF metdata; returns json
- */
-func iiifHandler(rw http.ResponseWriter, req *http.Request, params httprouter.Params) {
-	pid := params.ByName("pid")
+// iiifHandler processes a request for IIIF presentation metadata
+func iiifHandler(c *gin.Context) {
+	pid := c.Param("pid")
 	if strings.Compare(pid, "favicon.ico") == 0 {
 		return
 	}
-	unitID, _ := strconv.Atoi(req.URL.Query().Get("unit"))
 
 	// initialize IIIF data struct
 	var data models.IIIF
-	data.URL = fmt.Sprintf("http://%s%s", req.Host, req.URL)
-	data.IiifURL = viper.GetString("iiif_url")
-	data.VirgoURL = viper.GetString("virgo_url")
+	data.URL = fmt.Sprintf("http://%s%s", c.Request.Host, c.Request.URL)
+	data.IiifURL = config.iiifURL
+	data.VirgoURL = config.virgoURL
 	data.MetadataPID = pid
 	data.Metadata = make(map[string]string)
 
 	// Tracksys is the system that tracks items that contain
 	// masterfiles. All pids the arrive at the IIIF service should
 	// refer to these items. Determine what type the PID is:
-	pidURL := fmt.Sprintf("%s/pid/%s/type", viper.GetString("tracksys_api_url"), pid)
+	pidURL := fmt.Sprintf("%s/pid/%s/type", config.tracksysURL, pid)
 	pidType, err := getAPIResponse(pidURL)
 	if err != nil {
-		rw.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprintf(rw, "Unable to connect with TrackSys to identify pid %s", pid)
+		c.String(http.StatusServiceUnavailable, "Unable to connect with TrackSys to identify pid %s", pid)
 		return
 	}
 
 	if pidType == "sirsi_metadata" {
 		log.Printf("%s is a sirsi metadata record", pid)
-		generateFromSirsi(data, rw, unitID)
+		unitID, _ := strconv.Atoi(c.Query("unit"))
+		generateFromSirsi(data, c, unitID)
 	} else if pidType == "xml_metadata" {
 		log.Printf("%s is an xml metadata record", pid)
-		generateFromXML(data, rw)
+		generateFromXML(data, c)
 	} else if pidType == "apollo_metadata" {
 		log.Printf("%s is an apollo metadata record", pid)
-		generateFromApollo(data, rw)
+		generateFromApollo(data, c)
 	} else if pidType == "archivesspace_metadata" {
 		log.Printf("%s is an as metadata record", pid)
-		generateFromExternal(data, rw)
+		generateFromExternal(data, c)
 	} else if pidType == "component" {
 		log.Printf("%s is a component", pid)
-		generateFromComponent(pid, data, rw)
+		generateFromComponent(pid, data, c)
 	} else {
 		log.Printf("ERROR: Couldn't find %s", pid)
-		rw.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(rw, "PID %s not found", pid)
+		c.String(http.StatusNotFound, "PID %s not found", pid)
 	}
 }
 
 func getAPIResponse(url string) (string, error) {
-	resp, err := http.Get(url)
+	timeout := time.Duration(5 * time.Second)
+	client := http.Client{
+		Timeout: timeout,
+	}
+	resp, err := client.Get(url)
 	if err != nil {
 		return "", err
 	}
@@ -141,16 +132,15 @@ func getAPIResponse(url string) (string, error) {
 	return respString, nil
 }
 
-// Generate the IIIF manifest from data found in Apollo
-func generateFromApollo(data models.IIIF, rw http.ResponseWriter) {
+// generateFromApollo will Generate the IIIF manifest from data found in Apollo
+func generateFromApollo(data models.IIIF, c *gin.Context) {
 	// Get some metadata about the collection from Apollo API...
 	PID := data.MetadataPID
-	apolloURL := fmt.Sprintf("%s/items/%s", viper.GetString("apollo_api_url"), PID)
+	apolloURL := fmt.Sprintf("%s/items/%s", config.apolloURL, PID)
 	respStr, err := getAPIResponse(apolloURL)
 	if err != nil {
 		log.Printf("Apollo Request failed: %s", err.Error())
-		rw.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprintf(rw, "Unable communicate with Apollo: %s", err.Error())
+		c.String(http.StatusServiceUnavailable, "Unable communicate with Apollo: %s", err.Error())
 		return
 	}
 
@@ -158,21 +148,20 @@ func generateFromApollo(data models.IIIF, rw http.ResponseWriter) {
 	err = parsers.GetMetadataFromJSON(&data, respStr)
 	if err != nil {
 		log.Printf("Unable to parse Apollo response: %s", err.Error())
-		rw.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprintf(rw, "Unable to parse Apollo Metadata: %s", err.Error())
+		c.String(http.StatusUnprocessableEntity, "Unable to parse Apollo Metadata: %s", err.Error())
 		return
 	}
 
 	// Get masterFiles from TrackSys manifest API
-	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
+	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
 	respStr, err = getAPIResponse(tsURL)
 	parsers.GetMasterFilesFromJSON(&data, respStr)
 
-	renderIiifMetadata(data, rw)
+	renderIiifMetadata(data, c)
 }
 
 func getTrackSysMetadata(data *models.IIIF) error {
-	tsURL := fmt.Sprintf("%s/metadata/%s?type=brief", viper.GetString("tracksys_api_url"), data.MetadataPID)
+	tsURL := fmt.Sprintf("%s/metadata/%s?type=brief", config.tracksysURL, data.MetadataPID)
 	respStr, err := getAPIResponse(tsURL)
 	if err != nil {
 		return err
@@ -198,88 +187,86 @@ func getTrackSysMetadata(data *models.IIIF) error {
 	return nil
 }
 
-// Generate the IIIF manifest from TrackSys XML Metadata
-func generateFromXML(data models.IIIF, rw http.ResponseWriter) {
+// generateFromXML wil generate the IIIF manifest from TrackSys XML Metadata
+func generateFromXML(data models.IIIF, c *gin.Context) {
 	err := getTrackSysMetadata(&data)
 	if err != nil {
 		log.Printf("Tracksys metadata Request failed: %s", err.Error())
-		rw.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprintf(rw, "Unable retrieve metadata: %s", err.Error())
+		c.String(http.StatusServiceUnavailable, "Unable retrieve metadata: %s", err.Error())
 		return
 	}
 
 	parsers.ParseSolrRecord(&data, "XmlMetadata")
 
 	// Get masterFiles from TrackSys manifest API that are hooked to this component
-	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
+	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
 	respStr, err := getAPIResponse(tsURL)
 	parsers.GetMasterFilesFromJSON(&data, respStr)
-	renderIiifMetadata(data, rw)
+	renderIiifMetadata(data, c)
 }
 
-// Generate the IIIF manifest for a METADATA record
-func generateFromSirsi(data models.IIIF, rw http.ResponseWriter, unitID int) {
+// generateFromSirsi will generate the IIIF manifest for a SIRSI METADATA record
+func generateFromSirsi(data models.IIIF, c *gin.Context, unitID int) {
 	err := getTrackSysMetadata(&data)
 	if err != nil {
 		log.Printf("Tracksys metadata Request failed: %s", err.Error())
-		rw.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprintf(rw, "Unable retrieve metadata: %s", err.Error())
+		c.String(http.StatusServiceUnavailable, "Unable retrieve metadata: %s", err.Error())
 		return
 	}
 
 	parsers.ParseSolrRecord(&data, "SirsiMetadata")
 
 	// Get data for all master files from units associated with the metadata record. Include unit if specified
-	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
+	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
 	if unitID > 0 {
 		tsURL = fmt.Sprintf("%s?unit=%d", tsURL, unitID)
 	}
 	respStr, err := getAPIResponse(tsURL)
 	parsers.GetMasterFilesFromJSON(&data, respStr)
-	renderIiifMetadata(data, rw)
+	renderIiifMetadata(data, c)
 }
 
-// Generate the IIIF manifest for a METADATA record
-func generateFromExternal(data models.IIIF, rw http.ResponseWriter) {
+// generateFromExternal will generate the IIIF manifest for an external record
+func generateFromExternal(data models.IIIF, c *gin.Context) {
 	err := getTrackSysMetadata(&data)
 	if err != nil {
 		log.Printf("Tracksys metadata Request failed: %s", err.Error())
-		rw.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprintf(rw, "Unable retrieve metadata: %s", err.Error())
+		c.String(http.StatusServiceUnavailable, "Unable retrieve metadata: %s", err.Error())
 		return
 	}
 
 	// Get data for all master files from units associated with the metadata record. Include unit if specified
-	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), data.MetadataPID)
+	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
 	respStr, err := getAPIResponse(tsURL)
 	parsers.GetMasterFilesFromJSON(&data, respStr)
-	renderIiifMetadata(data, rw)
+	renderIiifMetadata(data, c)
 }
 
-func generateFromComponent(pid string, data models.IIIF, rw http.ResponseWriter) {
+func generateFromComponent(pid string, data models.IIIF, c *gin.Context) {
 	err := getTrackSysMetadata(&data)
 	if err != nil {
 		log.Printf("Tracksys metadata Request failed: %s", err.Error())
-		rw.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprintf(rw, "Unable retrieve metadata: %s", err.Error())
+		c.String(http.StatusServiceUnavailable, "Unable retrieve metadata: %s", err.Error())
 		return
 	}
 
 	// Get masterFiles from TrackSys manifest API that are hooked to this component
-	tsURL := fmt.Sprintf("%s/manifest/%s", viper.GetString("tracksys_api_url"), pid)
+	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, pid)
 	respStr, err := getAPIResponse(tsURL)
 	parsers.GetMasterFilesFromJSON(&data, respStr)
-	renderIiifMetadata(data, rw)
+	renderIiifMetadata(data, c)
 }
 
-func renderIiifMetadata(data models.IIIF, rw http.ResponseWriter) {
-	rw.Header().Set("content-type", "application/json; charset=utf-8")
+func renderIiifMetadata(data models.IIIF, c *gin.Context) {
 	tmpl := template.Must(template.ParseFiles("templates/iiif.json"))
-	err := tmpl.ExecuteTemplate(rw, "iiif.json", data)
+	var outBuffer bytes.Buffer
+	err := tmpl.Execute(&outBuffer, data)
 	if err != nil {
 		log.Printf("Unable to render IIIF metadata for %s: %s", data.MetadataPID, err.Error())
-		fmt.Fprintf(rw, "Unable to render IIIF metadata: %s", err.Error())
+		c.String(http.StatusInternalServerError, "Unable to render IIIF metadata: %s", err.Error())
 		return
 	}
 	log.Printf("IIIF Metadata generated for %s", data.MetadataPID)
+	c.Header("content-type", "application/json; charset=utf-8")
+	c.String(http.StatusOK, outBuffer.String())
 }
