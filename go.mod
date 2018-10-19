@@ -9,7 +9,9 @@ require (
 	github.com/mattn/go-isatty v0.0.4 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/viper v1.2.1
+	github.com/stretchr/testify v1.2.2 // indirect
 	github.com/ugorji/go/codec v0.0.0-20181018023622-b30ce92d500b // indirect
 	golang.org/x/net v0.0.0-20181017193950-04a2e542c03f // indirect
 	gopkg.in/go-playground/validator.v8 v8.18.2 // indirect
