@@ -1,9 +1,0 @@
-port: 8080
-iiif_url: https://iiif.lib.virginia.edu/iiif
-apollo_api_url: http://apollo.lib.virginia.edu/api
-tracksys_api_url: http://tracksys.lib.virginia.edu/api
-https: false
-ssl_crt: cert.pem
-ssl_key: key.pem
-virgo_solr_url: http://solr.lib.virginia.edu:8082/solr/core
-virgo_url: http://search.lib.virginia.edu/catalog
