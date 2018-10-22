@@ -9,6 +9,8 @@ SRC_TREE=cmd/iiifsrv
 
 build: darwin linux copy-supporting
 
+linux-full: linux copy-supporting
+
 all: darwin linux copy-supporting
 
 darwin:
