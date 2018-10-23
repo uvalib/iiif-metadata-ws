@@ -42,14 +42,8 @@ func main() {
 	flag.StringVar(&config.tracksysURL, "tracksys", "http://tracksys.lib.virginia.edu/api", "Tracksys URL")
 	flag.StringVar(&config.apolloURL, "apollo", "http://apollo.lib.virginia.edu/api", "Apollo URL")
 	flag.StringVar(&config.solrURL, "solr", "http://solr.lib.virginia.edu:8082/solr/core", "Virgo Solr URL")
-	flag.StringVar(&config.hostName, "host", "", "Hostname for this service")
+	flag.StringVar(&config.hostName, "host", "iiifman.lib.virginia.edu", "Hostname for this service")
 	flag.Parse()
-
-	if config.hostName == "" {
-		log.Printf("IIIF Manifest host not set; this info will be extracted from request headers")
-	} else {
-		log.Printf("IIIF Manifest host set to: %s", config.hostName)
-	}
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
@@ -60,8 +54,7 @@ func main() {
 	router.GET("/version", versionHandler)
 	router.GET("/healthcheck", healthCheckHandler)
 	router.GET("/config", configHandler)
-	router.GET("/resources/:pid", iiifHandler)
-	router.GET("/resources/:pid/manifest.json", iiifHandler)
+	router.GET("/pid/:pid", iiifHandler)
 	api := router.Group("/api")
 	{
 		api.GET("/aries", ariesPingHandler)

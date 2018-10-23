@@ -29,7 +29,10 @@ func ariesLookupHandler(c *gin.Context) {
 		return
 	}
 
-	// TODO return Aries responce with link to manifest and identifier
-	// TODO Fix build scripts to accept flags to control various URL and HostName parameters
-	c.String(http.StatusOK, "IIIF Manifest Service Aries API Lookup %s", id)
+	svc := gin.H{"url": fmt.Sprintf("%s/pid/%s", config.hostName, id), "protocol": "iiif-presentation"}
+	ids := []string{id}
+	c.JSON(http.StatusOK, gin.H{
+		"identifer":   ids,
+		"service_url": []interface{}{svc},
+	})
 }
