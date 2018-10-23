@@ -95,7 +95,7 @@ func iiifHandler(c *gin.Context) {
 
 	// initialize IIIF data struct
 	var data IIIF
-	data.URL = fmt.Sprintf("http://%s%s", c.Request.Host, c.Request.URL)
+	data.URL = fmt.Sprintf("https://%s/pid/%s", config.hostName, pid)
 	data.MetadataPID = pid
 	data.Metadata = make(map[string]string)
 

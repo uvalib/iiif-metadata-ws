@@ -29,7 +29,7 @@ func ariesLookupHandler(c *gin.Context) {
 		return
 	}
 
-	svc := gin.H{"url": fmt.Sprintf("%s/pid/%s", config.hostName, id), "protocol": "iiif-presentation"}
+	svc := gin.H{"url": fmt.Sprintf("https://%s/pid/%s", config.hostName, id), "protocol": "iiif-presentation"}
 	ids := []string{id}
 	c.JSON(http.StatusOK, gin.H{
 		"identifer":   ids,
