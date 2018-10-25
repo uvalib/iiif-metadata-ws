@@ -46,6 +46,7 @@ func main() {
 	flag.Parse()
 
 	gin.SetMode(gin.ReleaseMode)
+	gin.DisableConsoleColor()
 	router := gin.Default()
 	router.Use(cors.Default())
 
@@ -55,6 +56,7 @@ func main() {
 	router.GET("/healthcheck", healthCheckHandler)
 	router.GET("/config", configHandler)
 	router.GET("/pid/:pid", iiifHandler)
+	router.GET("/pid/:pid/manifest.json", iiifHandler)
 	api := router.Group("/api")
 	{
 		api.GET("/aries", ariesPingHandler)
