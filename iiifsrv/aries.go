@@ -24,7 +24,7 @@ func ariesLookupHandler(c *gin.Context) {
 		c.String(http.StatusNotFound, "id %s not found", id)
 		return
 	}
-	if pidType == "invalid" {
+	if pidType == "invalid" && pidType != "masterfile" {
 		c.String(http.StatusNotFound, "id %s not found", id)
 		return
 	}
