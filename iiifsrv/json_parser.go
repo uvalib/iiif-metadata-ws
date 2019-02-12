@@ -106,6 +106,8 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) {
 			} else {
 				mf.Rotation = "0"
 			}
+		} else {
+			mf.Rotation = "0"
 		}
 		data.MasterFiles = append(data.MasterFiles, mf)
 
