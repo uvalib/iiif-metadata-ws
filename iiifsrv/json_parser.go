@@ -97,6 +97,16 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) {
 		if desc, ok := mfJSON["description"]; ok {
 			mf.Description = cleanString(desc.(string))
 		}
+		if flip, ok := mfJSON["flip_axis"]; ok {
+			axis := flip.(string)
+			if axis == "y_axis" {
+				mf.Rotation = "!0"
+			} else if axis == "x_axis" {
+				mf.Rotation = "!180"
+			} else {
+				mf.Rotation = "0"
+			}
+		}
 		data.MasterFiles = append(data.MasterFiles, mf)
 
 		// if exemplar is set, see if it matches the current master file filename
@@ -105,6 +115,7 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) {
 		if mfJSON["exemplar"] != nil {
 			data.StartPage = pgNum
 			data.ExemplarPID = mf.PID
+			data.ExemplarRotation = mf.Rotation
 			log.Printf("Exemplar set to filename %s, page %d", filename, data.StartPage)
 		}
 		pgNum++

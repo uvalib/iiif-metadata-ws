@@ -3,7 +3,7 @@
    "@id":"{{.URL}}",
    "@type":"sc:Manifest",
    {{- if .ExemplarPID}}
-   "thumbnail":"https://iiif.lib.virginia.edu/iiif/{{.ExemplarPID}}/full/!200,200/0/default.jpg",
+   "thumbnail":"https://iiif.lib.virginia.edu/iiif/{{.ExemplarPID}}/full/!200,200/{{.ExemplarRotation}}/default.jpg",
    {{- end}}
    "label":"{{.Title}}",
    {{- if .Metadata}}
@@ -31,7 +31,7 @@
                "description":"{{.Description}}",
                "metadata": [{"label":"Image Description", "value":"{{.Description}}"}],
                {{- end}}
-               "thumbnail":"https://iiif.lib.virginia.edu/iiif/{{.PID}}/full/!200,200/0/default.jpg",
+               "thumbnail":"https://iiif.lib.virginia.edu/iiif/{{.PID}}/full/!200,200/{{.Rotation}}/default.jpg",
                "width": {{.Width}},
                "height": {{.Height}},
                "images":[

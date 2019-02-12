@@ -19,7 +19,7 @@ import (
 )
 
 // version of the service
-const version = "3.0.0"
+const version = "3.1.0"
 
 // configuratition data
 type serviceConfig struct {

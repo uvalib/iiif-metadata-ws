@@ -23,22 +23,24 @@ type MasterFile struct {
 	Description string
 	Width       int
 	Height      int
+	Rotation    string
 }
 
 // IIIF coontains all of the data necessary to render an IIIF manifest
 type IIIF struct {
-	VirgoURL    string
-	IiifURL     string
-	URL         string
-	VirgoKey    string
-	MetadataPID string
-	Title       string
-	StartPage   int
-	ExemplarPID string
-	License     string
-	Related     string
-	Metadata    map[string]string
-	MasterFiles []MasterFile
+	VirgoURL         string
+	IiifURL          string
+	URL              string
+	VirgoKey         string
+	MetadataPID      string
+	Title            string
+	StartPage        int
+	ExemplarPID      string
+	ExemplarRotation string
+	License          string
+	Related          string
+	Metadata         map[string]string
+	MasterFiles      []MasterFile
 }
 
 // JSONMetadata takes the Metadata map and joins it
