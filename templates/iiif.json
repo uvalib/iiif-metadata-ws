@@ -38,8 +38,9 @@
                   {
                      "@type":"oa:Annotation",
                      "motivation":"sc:painting",
+                     {{- if eq .Rotation "0"}}
                      "resource":{
-                        "@id":"https://iiif.lib.virginia.edu/iiif/{{.PID}}",
+                        "@id":"https://iiif.lib.virginia.edu/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
                         "@type":"dcTypes:Image",
                         "format":"image/jp2",
                         "width": {{.Width}},
@@ -50,6 +51,28 @@
                            "profile":"http://iiif.io/api/image/2/level1.json"
                         }
                      },
+                     {{- else}}
+                     "resource":{
+                        "@id":"https://iiif.lib.virginia.edu/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
+                        "@type":"oa:SpecificResource",
+                        "full": {
+                           "@id":"https://iiif.lib.virginia.edu/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
+                           "@type":"dcTypes:Image",
+                           "width": {{.Width}},
+                           "height": {{.Height}},
+                           "service": {
+                              "@context":"http://iiif.io/api/image/2/context.json",
+                              "@id":"https://iiif.lib.virginia.edu/iiif/{{.PID}}",
+                              "profile":"http://iiif.io/api/image/2/level1.json"
+                           }
+                        },
+                        "selector": {
+                           "@context": "http://iiif.io/api/annex/openannotation/context.json",
+                           "@type": "iiif:ImageApiSelector",
+                           "rotation": "{{.Rotation}}"
+                        }
+                     },
+                     {{- end}}
                      "on":"https://iiif.lib.virginia.edu/iiif/dl/{{$metadataPid}}/canvas/c{{$index}}"
                   }
                ]
