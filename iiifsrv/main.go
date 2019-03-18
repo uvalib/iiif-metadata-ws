@@ -19,7 +19,7 @@ import (
 )
 
 // version of the service
-const version = "3.3.0"
+const version = "3.3.1"
 
 // configuratition data
 type serviceConfig struct {
@@ -57,6 +57,7 @@ func main() {
 	router.GET("/config", configHandler)
 	router.GET("/pid/:pid", iiifHandler)
 	router.GET("/pid/:pid/manifest.json", iiifHandler)
+	router.GET("/pid/:pid/exist", existHandler)
 	api := router.Group("/api")
 	{
 		api.GET("/aries", ariesPingHandler)
@@ -89,6 +90,18 @@ func versionHandler(c *gin.Context) {
 
 func healthCheckHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"alive": "true"})
+}
+
+// existHandler checks if there is IIIF data available for a PID
+func existHandler(c *gin.Context) {
+	pid := c.Param("pid")
+	pidURL := fmt.Sprintf("%s/pid/%s/type", config.tracksysURL, pid)
+	_, err := getAPIResponse(pidURL)
+	if err != nil {
+		c.String(http.StatusNotFound, "IIIF Metadata does not exist for %s", pid)
+		return
+	}
+	c.String(http.StatusOK, "IIIF Metadata exists for %s", pid)
 }
 
 // iiifHandler processes a request for IIIF presentation metadata
