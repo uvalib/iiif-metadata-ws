@@ -19,7 +19,7 @@ import (
 )
 
 // version of the service
-const version = "3.2.0"
+const version = "3.3.0"
 
 // configuratition data
 type serviceConfig struct {
@@ -121,7 +121,7 @@ func iiifHandler(c *gin.Context) {
 	} else if pidType == "apollo_metadata" {
 		log.Printf("%s is an apollo metadata record", pid)
 		generateFromApollo(data, c)
-	} else if pidType == "archivesspace_metadata" {
+	} else if pidType == "archivesspace_metadata" || pidType == "jstor_metadata" {
 		log.Printf("%s is an as metadata record", pid)
 		generateFromExternal(data, c)
 	} else if pidType == "component" {
