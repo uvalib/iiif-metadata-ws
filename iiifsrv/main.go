@@ -19,7 +19,7 @@ import (
 )
 
 // version of the service
-const version = "3.3.1"
+const version = "3.4.0"
 
 // configuratition data
 type serviceConfig struct {
@@ -96,8 +96,12 @@ func healthCheckHandler(c *gin.Context) {
 func existHandler(c *gin.Context) {
 	pid := c.Param("pid")
 	pidURL := fmt.Sprintf("%s/pid/%s/type", config.tracksysURL, pid)
-	_, err := getAPIResponse(pidURL)
+	resp, err := getAPIResponse(pidURL)
 	if err != nil {
+		c.String(http.StatusNotFound, "IIIF Metadata does not exist for %s", pid)
+		return
+	}
+	if resp == "masterfile" {
 		c.String(http.StatusNotFound, "IIIF Metadata does not exist for %s", pid)
 		return
 	}

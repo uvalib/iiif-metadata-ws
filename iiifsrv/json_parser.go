@@ -97,12 +97,16 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) {
 		if desc, ok := mfJSON["description"]; ok {
 			mf.Description = cleanString(desc.(string))
 		}
-		if flip, ok := mfJSON["flip_axis"]; ok {
-			axis := flip.(string)
-			if axis == "y_axis" {
+		if orientation, ok := mfJSON["orientation"]; ok {
+			axis := orientation.(string)
+			if axis == "flip_y_axis" {
 				mf.Rotation = "!0"
-			} else if axis == "x_axis" {
-				mf.Rotation = "!180"
+			} else if axis == "rotate90" {
+				mf.Rotation = "90"
+			} else if axis == "rotate180" {
+				mf.Rotation = "180"
+			} else if axis == "rotate270" {
+				mf.Rotation = "270"
 			} else {
 				mf.Rotation = "0"
 			}
