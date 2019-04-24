@@ -19,10 +19,11 @@
          "@type":"sc:Sequence",
          "canvases":[
             {{- $metadataPid := .MetadataPID -}}
+            {{- $iiifURL := .IiifURL -}}
             {{- range $index, $element := .MasterFiles -}}
             {{- if $index}},{{end -}}
             {
-               "@id":"{{.IiifURL}}/iiif/dl/{{$metadataPid}}/canvas/c{{$index}}",
+               "@id":"{{$iiifURL}}/iiif/dl/{{$metadataPid}}/canvas/c{{$index}}",
                "@type":"sc:Canvas",
                {{- if .Title}}
                "label":"{{.Title}}",
@@ -31,7 +32,7 @@
                "description":"{{.Description}}",
                "metadata": [{"label":"Image Description", "value":"{{.Description}}"}],
                {{- end}}
-               "thumbnail":"{{.IiifURL}}/iiif/{{.PID}}/full/!200,200/{{.Rotation}}/default.jpg",
+               "thumbnail":"{{$iiifURL}}/iiif/{{.PID}}/full/!200,200/{{.Rotation}}/default.jpg",
                "width": {{.Width}},
                "height": {{.Height}},
                "images":[
@@ -40,29 +41,29 @@
                      "motivation":"sc:painting",
                      {{- if eq .Rotation "0"}}
                      "resource":{
-                        "@id":"{{.IiifURL}}/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
+                        "@id":"{{$iiifURL}}/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
                         "@type":"dcTypes:Image",
                         "format":"image/jp2",
                         "width": {{.Width}},
                         "height": {{.Height}},
                         "service":{
                            "@context":"http://iiif.io/api/image/2/context.json",
-                           "@id":"{{.IiifURL}}/iiif/{{.PID}}",
+                           "@id":"{{$iiifURL}}/iiif/{{.PID}}",
                            "profile":"http://iiif.io/api/image/2/level1.json"
                         }
                      },
                      {{- else}}
                      "resource":{
-                        "@id":"{{.IiifURL}}/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
+                        "@id":"{{$iiifURL}}/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
                         "@type":"oa:SpecificResource",
                         "full": {
-                           "@id":"{{.IiifURL}}/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
+                           "@id":"{{$iiifURL}}/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
                            "@type":"dcTypes:Image",
                            "width": {{.Width}},
                            "height": {{.Height}},
                            "service": {
                               "@context":"http://iiif.io/api/image/2/context.json",
-                              "@id":"{{.IiifURL}}/iiif/{{.PID}}",
+                              "@id":"{{$iiifURL}}/iiif/{{.PID}}",
                               "profile":"http://iiif.io/api/image/2/level1.json"
                            }
                         },
@@ -73,7 +74,7 @@
                         }
                      },
                      {{- end}}
-                     "on":"{{.IiifURL}}/iiif/dl/{{$metadataPid}}/canvas/c{{$index}}"
+                     "on":"{{$iiifURL}}/iiif/dl/{{$metadataPid}}/canvas/c{{$index}}"
                   }
                ]
             }
