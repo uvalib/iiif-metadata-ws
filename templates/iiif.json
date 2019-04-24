@@ -3,7 +3,7 @@
    "@id":"{{.URL}}",
    "@type":"sc:Manifest",
    {{- if .ExemplarPID}}
-   "thumbnail":"https://iiif.lib.virginia.edu/iiif/{{.ExemplarPID}}/full/!200,200/{{.ExemplarRotation}}/default.jpg",
+   "thumbnail":"https://{{.IiifURL}}/iiif/{{.ExemplarPID}}/full/!200,200/{{.ExemplarRotation}}/default.jpg",
    {{- end}}
    "label":"{{.Title}}",
    {{- if .Metadata}}
@@ -11,18 +11,18 @@
    {{- end}}
    "license":"{{.License}}",
    "attribution":"Provided by the University of Virginia Library",
-   "logo":"https://iiif.lib.virginia.edu/iiif/static:1/full/full/0/default.jpg",
+   "logo":"https://{{.IiifURL}}/iiif/static:1/full/full/0/default.jpg",
    "related":"http://search.lib.virginia.edu/catalog/{{.VirgoKey}}",
    "sequences":[
       {
-         "startCanvas": "https://iiif.lib.virginia.edu/iiif/dl/{{.MetadataPID}}/canvas/c{{.StartPage}}",
+         "startCanvas": "https://{{.IiifURL}}/iiif/dl/{{.MetadataPID}}/canvas/c{{.StartPage}}",
          "@type":"sc:Sequence",
          "canvases":[
             {{- $metadataPid := .MetadataPID -}}
             {{- range $index, $element := .MasterFiles -}}
             {{- if $index}},{{end -}}
             {
-               "@id":"https://iiif.lib.virginia.edu/iiif/dl/{{$metadataPid}}/canvas/c{{$index}}",
+               "@id":"https://{{.IiifURL}}/iiif/dl/{{$metadataPid}}/canvas/c{{$index}}",
                "@type":"sc:Canvas",
                {{- if .Title}}
                "label":"{{.Title}}",
@@ -31,7 +31,7 @@
                "description":"{{.Description}}",
                "metadata": [{"label":"Image Description", "value":"{{.Description}}"}],
                {{- end}}
-               "thumbnail":"https://iiif.lib.virginia.edu/iiif/{{.PID}}/full/!200,200/{{.Rotation}}/default.jpg",
+               "thumbnail":"https://{{.IiifURL}}/iiif/{{.PID}}/full/!200,200/{{.Rotation}}/default.jpg",
                "width": {{.Width}},
                "height": {{.Height}},
                "images":[
@@ -40,29 +40,29 @@
                      "motivation":"sc:painting",
                      {{- if eq .Rotation "0"}}
                      "resource":{
-                        "@id":"https://iiif.lib.virginia.edu/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
+                        "@id":"https://{{.IiifURL}}/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
                         "@type":"dcTypes:Image",
                         "format":"image/jp2",
                         "width": {{.Width}},
                         "height": {{.Height}},
                         "service":{
                            "@context":"http://iiif.io/api/image/2/context.json",
-                           "@id":"https://iiif.lib.virginia.edu/iiif/{{.PID}}",
+                           "@id":"https://{{.IiifURL}}/iiif/{{.PID}}",
                            "profile":"http://iiif.io/api/image/2/level1.json"
                         }
                      },
                      {{- else}}
                      "resource":{
-                        "@id":"https://iiif.lib.virginia.edu/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
+                        "@id":"https://{{.IiifURL}}/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
                         "@type":"oa:SpecificResource",
                         "full": {
-                           "@id":"https://iiif.lib.virginia.edu/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
+                           "@id":"https://{{.IiifURL}}/iiif/{{.PID}}/full/full/{{.Rotation}}/default.jpg",
                            "@type":"dcTypes:Image",
                            "width": {{.Width}},
                            "height": {{.Height}},
                            "service": {
                               "@context":"http://iiif.io/api/image/2/context.json",
-                              "@id":"https://iiif.lib.virginia.edu/iiif/{{.PID}}",
+                              "@id":"https://{{.IiifURL}}/iiif/{{.PID}}",
                               "profile":"http://iiif.io/api/image/2/level1.json"
                            }
                         },
@@ -73,7 +73,7 @@
                         }
                      },
                      {{- end}}
-                     "on":"https://iiif.lib.virginia.edu/iiif/dl/{{$metadataPid}}/canvas/c{{$index}}"
+                     "on":"https://{{.IiifURL}}/iiif/dl/{{$metadataPid}}/canvas/c{{$index}}"
                   }
                ]
             }

@@ -28,7 +28,6 @@ type MasterFile struct {
 
 // IIIF coontains all of the data necessary to render an IIIF manifest
 type IIIF struct {
-	VirgoURL         string
 	IiifURL          string
 	URL              string
 	VirgoKey         string

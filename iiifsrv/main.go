@@ -19,7 +19,7 @@ import (
 )
 
 // version of the service
-const version = "3.4.0"
+const version = "3.4.1"
 
 // configuratition data
 type serviceConfig struct {
@@ -28,6 +28,7 @@ type serviceConfig struct {
 	solrURL     string
 	tracksysURL string
 	apolloURL   string
+	iiifURL     string
 }
 
 var config = serviceConfig{}
@@ -43,6 +44,7 @@ func main() {
 	flag.StringVar(&config.apolloURL, "apollo", "http://apollo.lib.virginia.edu/api", "Apollo URL")
 	flag.StringVar(&config.solrURL, "solr", "http://solr.lib.virginia.edu:8082/solr/core", "Virgo Solr URL")
 	flag.StringVar(&config.hostName, "host", "iiifman.lib.virginia.edu", "Hostname for this service")
+	flag.StringVar(&config.iiifURL, "iiif", "iiif.lib.virginia.edu", "IIIF image server")
 	flag.Parse()
 
 	gin.SetMode(gin.ReleaseMode)
@@ -65,7 +67,7 @@ func main() {
 	}
 
 	portStr := fmt.Sprintf(":%d", config.port)
-	log.Printf("Start HTTP service on port %s with CORS support enabled", portStr)
+	log.Printf("Start iiif manifest service on port %s", portStr)
 	log.Fatal(router.Run(portStr))
 }
 
@@ -80,6 +82,7 @@ func configHandler(c *gin.Context) {
 		"apollo":       config.apolloURL,
 		"tracksys":     config.tracksysURL,
 		"solr":         config.solrURL,
+		"iiif":         config.iiifURL,
 	})
 }
 
@@ -114,6 +117,7 @@ func iiifHandler(c *gin.Context) {
 
 	// initialize IIIF data struct
 	var data IIIF
+	data.IiifURL = config.iiifURL
 	data.URL = fmt.Sprintf("https://%s/pid/%s", config.hostName, pid)
 	data.MetadataPID = pid
 	data.Metadata = make(map[string]string)
