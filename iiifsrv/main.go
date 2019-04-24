@@ -44,7 +44,7 @@ func main() {
 	flag.StringVar(&config.apolloURL, "apollo", "http://apollo.lib.virginia.edu/api", "Apollo URL")
 	flag.StringVar(&config.solrURL, "solr", "http://solr.lib.virginia.edu:8082/solr/core", "Virgo Solr URL")
 	flag.StringVar(&config.hostName, "host", "iiifman.lib.virginia.edu", "Hostname for this service")
-	flag.StringVar(&config.iiifURL, "iiif", "iiif.lib.virginia.edu", "IIIF image server")
+	flag.StringVar(&config.iiifURL, "iiif", "https://iiif.lib.virginia.edu", "IIIF image server")
 	flag.Parse()
 
 	gin.SetMode(gin.ReleaseMode)
