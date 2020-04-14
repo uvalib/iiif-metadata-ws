@@ -33,6 +33,7 @@ type serviceConfig struct {
 
 var config = serviceConfig{}
 
+var serviceTimeout = 15 * time.Second
 /**
  * Main entry point for the web service
  */
@@ -155,9 +156,8 @@ func iiifHandler(c *gin.Context) {
 }
 
 func getAPIResponse(url string) (string, error) {
-	timeout := time.Duration(5 * time.Second)
 	client := http.Client{
-		Timeout: timeout,
+		Timeout: serviceTimeout,
 	}
 	resp, err := client.Get(url)
 	if err != nil {
