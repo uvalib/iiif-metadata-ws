@@ -27,23 +27,24 @@ func parseMARC(data *IIIF, marc string) {
 
 // parseVirgoSolr parse the solr record for the target item and extract relevant metadata elements
 func parseVirgoSolr(virgoURL string, data *IIIF) {
-	solrURL := fmt.Sprintf("%s/select?q=id:%s", virgoURL, data.VirgoKey)
-	log.Printf("Get Solr record from %s...", solrURL)
-	resp, err := http.Get(solrURL)
+	url := fmt.Sprintf("%s/select?q=id:%s", virgoURL, data.VirgoKey)
+	log.Printf("Get SOLR record from %s...", url)
+	resp, err := http.Get(url)
 	if err != nil {
-		log.Printf("Unable to get Solr index: %s", err.Error())
+		log.Printf("ERROR: query endpoint: %s (%s)", url, err.Error())
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		log.Printf("Bad response status code: %d", resp.StatusCode)
+		log.Printf("Bad response: status code %d, endpoint %s", resp.StatusCode, url)
 		return
 	}
 
 	xmlRoot, parseErr := xmlpath.Parse(resp.Body)
 	if parseErr != nil {
 		log.Printf("ERROR: Unable to parse response: %s", parseErr.Error())
+		log.Printf("BODY: %s", resp.Body)
 		return
 	}
 
@@ -85,22 +86,23 @@ func parseVirgoSolr(virgoURL string, data *IIIF) {
 // parseTracksysSolr will get the solr add record from TrackSys and parse it for metdata elements
 func parseTracksysSolr(tracksysURL string, data *IIIF) {
 	// For XML metadata
-	solrURL := fmt.Sprintf("%s/solr/%s?no_external=1", tracksysURL, data.MetadataPID)
-	log.Printf("Get Solr record from %s...", solrURL)
-	resp, err := http.Get(solrURL)
+	url := fmt.Sprintf("%s/solr/%s?no_external=1", tracksysURL, data.MetadataPID)
+	log.Printf("Get SOLR record from %s...", url)
+	resp, err := http.Get(url)
 	if err != nil {
-		log.Printf("Unable to get Solr index: %s", err.Error())
+		log.Printf("ERROR: query endpoint: %s (%s)", url, err.Error())
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		log.Printf("Bad response status code: %d", resp.StatusCode)
+		log.Printf("Bad response: status code %d, endpoint %s", resp.StatusCode, url)
 		return
 	}
 
 	xmlRoot, parseErr := xmlpath.Parse(resp.Body)
 	if parseErr != nil {
 		log.Printf("ERROR: Unable to parse response: %s", parseErr.Error())
+		log.Printf("BODY: %s", resp.Body)
 		return
 	}
 
