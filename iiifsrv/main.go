@@ -174,6 +174,7 @@ func getAPIResponse(url string) (string, error) {
 
 	resp, err := httpClient.Get(url)
 	if err != nil {
+		log.Printf("ERROR: issuing request: %s, %s", url, err.Error())
 		return "", err
 	}
 	defer resp.Body.Close()
