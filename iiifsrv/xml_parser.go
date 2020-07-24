@@ -28,7 +28,7 @@ func parseMARC(data *IIIF, marc string) {
 // parseVirgoSolr parse the solr record for the target item and extract relevant metadata elements
 func parseVirgoSolr(virgoURL string, data *IIIF) error {
 	url := fmt.Sprintf("%s/select?q=id:%s", virgoURL, data.VirgoKey)
-	log.Printf("INFO: get SOLR record from %s...", url)
+	log.Printf("INFO: get Solr record: %s", url)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		log.Printf("ERROR: query endpoint: %s (%s)", url, err.Error())
@@ -44,7 +44,7 @@ func parseVirgoSolr(virgoURL string, data *IIIF) error {
 	xmlRoot, parseErr := xmlpath.Parse(resp.Body)
 	if parseErr != nil {
 		log.Printf("ERROR: Unable to parse response: %s", parseErr.Error())
-		log.Printf("BODY: %s", resp.Body)
+		//log.Printf("BODY: %s", resp.Body)
 		return parseErr
 	}
 
@@ -88,7 +88,7 @@ func parseVirgoSolr(virgoURL string, data *IIIF) error {
 func parseTracksysSolr(tracksysURL string, data *IIIF) error {
 	// For XML metadata
 	url := fmt.Sprintf("%s/solr/%s?no_external=1", tracksysURL, data.MetadataPID)
-	log.Printf("INFO: get SOLR record from %s...", url)
+	log.Printf("INFO: get Solr record: %s", url)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		log.Printf("ERROR: query endpoint: %s (%s)", url, err.Error())
@@ -103,7 +103,7 @@ func parseTracksysSolr(tracksysURL string, data *IIIF) error {
 	xmlRoot, parseErr := xmlpath.Parse(resp.Body)
 	if parseErr != nil {
 		log.Printf("ERROR: unable to parse response: %s", parseErr.Error())
-		log.Printf("BODY: %s", resp.Body)
+		//log.Printf("BODY: %s", resp.Body)
 		return parseErr
 	}
 
