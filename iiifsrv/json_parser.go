@@ -20,12 +20,12 @@ func getMetadataFromJSON(data *IIIF, jsonStr string) error {
 	// the general interface{} to a specific type.
 	collection, ok := jsonMap["collection"].(map[string]interface{})
 	if !ok {
-		return errors.New("Unable to parse 'collection' from response")
+		return errors.New("unable to parse 'collection' from response")
 	}
 
 	children, ok := collection["children"].([]interface{})
 	if !ok {
-		return errors.New("Unable to parse 'children' from collection response")
+		return errors.New("unable to parse 'children' from collection response")
 	}
 
 	for _, c := range children {
@@ -36,25 +36,25 @@ func getMetadataFromJSON(data *IIIF, jsonStr string) error {
 		// get the Name data for this node
 		typeAttr, okName := child["type"].(map[string]interface{})
 		if !okName {
-			return errors.New("Unable to parse 'type' from response")
+			return errors.New("unable to parse 'type' from response")
 		}
 
 		// all names have a value; pick the ones we want ang get the
 		// value attribute from the child, Store it in the IIIF data
 		switch val := typeAttr["name"].(string); val {
 		case "title":
-			log.Printf("title:%s", child["value"].(string))
+			log.Printf("INFO: title:%s", child["value"].(string))
 			data.Title = cleanString(child["value"].(string))
 		case "catalogKey":
 			catalogKey := child["value"].(string)
-			log.Printf("catalogKey: %s", catalogKey)
+			log.Printf("INFO: catalogKey: %s", catalogKey)
 			data.VirgoKey = catalogKey
 		case "callNumber":
 			callNum := child["value"].(string)
-			log.Printf("callNumber: %s", callNum)
+			log.Printf("INFO: callNumber: %s", callNum)
 			data.Metadata["Call Number"] = callNum
 		case "useRights":
-			log.Printf("license: %s", child["valueURI"].(string))
+			log.Printf("INFO: license: %s", child["valueURI"].(string))
 			data.License = child["valueURI"].(string)
 		}
 	}
@@ -62,11 +62,11 @@ func getMetadataFromJSON(data *IIIF, jsonStr string) error {
 	// Add item-level title to the main title
 	item, ok := jsonMap["item"].(map[string]interface{})
 	if !ok {
-		return errors.New("Unable to parse 'item' from response")
+		return errors.New("unable to parse 'item' from response")
 	}
 	children, oK := item["children"].([]interface{})
 	if !oK {
-		return errors.New("Unable to parse 'children' from item response")
+		return errors.New("unable to parse 'children' from item response")
 	}
 	for _, c := range children {
 		child := c.(map[string]interface{})
@@ -122,7 +122,7 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) {
 			data.StartPage = pgNum
 			data.ExemplarPID = mf.PID
 			data.ExemplarRotation = mf.Rotation
-			log.Printf("Exemplar set to filename %s, page %d", filename, data.StartPage)
+			log.Printf("INFO: exemplar set to filename %s, page %d", filename, data.StartPage)
 		}
 		pgNum++
 	}

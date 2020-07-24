@@ -20,7 +20,7 @@ func ariesLookupHandler(c *gin.Context) {
 	pidURL := fmt.Sprintf("%s/pid/%s/type", config.tracksysURL, id)
 	pidType, err := getAPIResponse(pidURL)
 	if err != nil {
-		log.Printf("Request to TrackSys %s failed: %s", config.tracksysURL, err.Error())
+		log.Printf("ERROR: request to TrackSys %s failed: %s", config.tracksysURL, err.Error())
 		c.String(http.StatusNotFound, "id %s not found", id)
 		return
 	}

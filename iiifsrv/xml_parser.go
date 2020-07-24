@@ -2,9 +2,9 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 
 	xmlpath "gopkg.in/xmlpath.v2"
@@ -26,26 +26,26 @@ func parseMARC(data *IIIF, marc string) {
 }
 
 // parseVirgoSolr parse the solr record for the target item and extract relevant metadata elements
-func parseVirgoSolr(virgoURL string, data *IIIF) {
+func parseVirgoSolr(virgoURL string, data *IIIF) error {
 	url := fmt.Sprintf("%s/select?q=id:%s", virgoURL, data.VirgoKey)
-	log.Printf("Get SOLR record from %s...", url)
-	resp, err := http.Get(url)
+	log.Printf("INFO: get SOLR record from %s...", url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		log.Printf("ERROR: query endpoint: %s (%s)", url, err.Error())
-		return
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		log.Printf("Bad response: status code %d, endpoint %s", resp.StatusCode, url)
-		return
+		log.Printf("ERROR: bad response: status code %d, endpoint %s", resp.StatusCode, url)
+		return errors.New( "unable to get solr record (non-200 HTTP response)" )
 	}
 
 	xmlRoot, parseErr := xmlpath.Parse(resp.Body)
 	if parseErr != nil {
 		log.Printf("ERROR: Unable to parse response: %s", parseErr.Error())
 		log.Printf("BODY: %s", resp.Body)
-		return
+		return parseErr
 	}
 
 	// Query for the data; format_facet. This has a bunch of <str> children that
@@ -79,31 +79,32 @@ func parseVirgoSolr(virgoURL string, data *IIIF) {
 	date := getArrayValues(nodes, ", ")
 	if len(date) > 0 {
 		data.Metadata["Date"] = date
-		return
 	}
+
+	return nil
 }
 
 // parseTracksysSolr will get the solr add record from TrackSys and parse it for metdata elements
-func parseTracksysSolr(tracksysURL string, data *IIIF) {
+func parseTracksysSolr(tracksysURL string, data *IIIF) error {
 	// For XML metadata
 	url := fmt.Sprintf("%s/solr/%s?no_external=1", tracksysURL, data.MetadataPID)
-	log.Printf("Get SOLR record from %s...", url)
-	resp, err := http.Get(url)
+	log.Printf("INFO: get SOLR record from %s...", url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		log.Printf("ERROR: query endpoint: %s (%s)", url, err.Error())
-		return
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		log.Printf("Bad response: status code %d, endpoint %s", resp.StatusCode, url)
-		return
+		log.Printf("ERROR: bad response: status code %d, endpoint %s", resp.StatusCode, url)
+		return errors.New( "unable to get solr record (non-200 HTTP response)" )
 	}
 
 	xmlRoot, parseErr := xmlpath.Parse(resp.Body)
 	if parseErr != nil {
-		log.Printf("ERROR: Unable to parse response: %s", parseErr.Error())
+		log.Printf("ERROR: unable to parse response: %s", parseErr.Error())
 		log.Printf("BODY: %s", resp.Body)
-		return
+		return parseErr
 	}
 
 	// First, get format facets
@@ -136,6 +137,8 @@ func parseTracksysSolr(tracksysURL string, data *IIIF) {
 	if ok {
 		data.Metadata["Date"] = val
 	}
+
+	return nil
 }
 
 func getArrayValues(nodes *xmlpath.Iter, sep string) string {
