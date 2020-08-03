@@ -33,7 +33,7 @@ func parseVirgoSolr(virgoURL string, data *IIIF) error {
 		return err
 	}
 
-	xmlRoot, parseErr := xmlpath.Parse( strings.NewReader(resp) )
+	xmlRoot, parseErr := xmlpath.Parse(strings.NewReader(resp))
 	if parseErr != nil {
 		log.Printf("ERROR: Unable to parse response: %s", parseErr.Error())
 		log.Printf("BODY: %s", resp)
@@ -86,7 +86,7 @@ func parseTracksysSolr(tracksysURL string, data *IIIF) error {
 		return err
 	}
 
-	xmlRoot, parseErr := xmlpath.Parse( strings.NewReader(resp) )
+	xmlRoot, parseErr := xmlpath.Parse(strings.NewReader(resp))
 	if parseErr != nil {
 		log.Printf("ERROR: unable to parse response: %s", parseErr.Error())
 		log.Printf("BODY: %s", resp)
