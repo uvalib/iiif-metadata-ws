@@ -33,7 +33,7 @@ type serviceConfig struct {
 }
 
 var config = serviceConfig{}
-var readTimeout = 15
+var readTimeout = 45 // some of those Solr queries are realllllllyyyyy sloooowwwww
 var connTimeout = 5
 
 var httpClient = &http.Client{
@@ -178,7 +178,11 @@ func getAPIResponse(url string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
-	bodyBytes, _ := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("ERROR: reading response: %s, %s", url, err.Error())
+		return "", err
+	}
 	respString := string(bodyBytes)
 	if resp.StatusCode != 200 {
 		log.Printf("ERROR: bad response: status code %d, endpoint %s", resp.StatusCode, url)
