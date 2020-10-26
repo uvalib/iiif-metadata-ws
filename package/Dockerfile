@@ -46,7 +46,8 @@ COPY --from=builder /build/bin/iiif-metadata-ws.linux $APP_HOME/bin/iiifsrv
 RUN chown webservice:webservice /home/webservice/.profile $APP_HOME/scripts/entry.sh $APP_HOME/bin/iiifsrv && chmod 755 /home/webservice/.profile $APP_HOME/scripts/entry.sh $APP_HOME/bin/iiifsrv
 
 # Add the build tag
-COPY buildtag.* $APP_HOME/
+ARG BUILD_TAG
+RUN test -n "$BUILD_TAG" && touch $APP_HOME/buildtag.build-$BUILD_TAG || touch $APP_HOME/buildtag.build-0
 
 # Specify the user
 USER webservice
