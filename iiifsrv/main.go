@@ -11,7 +11,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"text/template"
 	"time"
 
@@ -102,9 +104,21 @@ func configHandler(c *gin.Context) {
 	})
 }
 
-// versionHandler returns the version of the service
+// Handle a request for / and return version info
 func versionHandler(c *gin.Context) {
-	c.String(http.StatusOK, "IIIF metadata service version %s", version)
+
+	build := "unknown"
+
+	// cos our CWD is the bin directory
+	files, _ := filepath.Glob("../buildtag.*")
+	if len(files) == 1 {
+		build = strings.Replace(files[0], "../buildtag.", "", 1)
+	}
+
+	vMap := make(map[string]string)
+	vMap["version"] = version
+	vMap["build"] = build
+	c.JSON(http.StatusOK, vMap)
 }
 
 func healthCheckHandler(c *gin.Context) {
