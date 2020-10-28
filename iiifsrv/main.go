@@ -32,6 +32,8 @@ func main() {
 	router.GET("/pid/:pid", svc.IiifHandler)
 	router.GET("/pid/:pid/manifest.json", svc.IiifHandler)
 	router.GET("/pid/:pid/exist", svc.ExistHandler)
+	router.GET("/pidcache/:pid", svc.CacheHandler)
+	router.GET("/pidcache/:pid/manifest.json", svc.CacheHandler)
 	api := router.Group("/api")
 	{
 		api.GET("/aries", svc.AriesPingHandler)

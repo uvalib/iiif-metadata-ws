@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"text/template"
 	"time"
 )
@@ -274,6 +275,21 @@ func renderIiifMetadata(data IIIF) (string, error) {
 	}
 	log.Printf("INFO: IIIF Metadata generated for %s", data.MetadataPID)
 	return outBuffer.String(), nil
+}
+
+//
+// generate the cache key name
+//
+func cacheKey( path string, pid string, unit string) string {
+    name := fmt.Sprintf( "%s-%s", path, pid )
+	if len( unit ) != 0 {
+		name = fmt.Sprintf( "%s-%s", name, unit)
+	}
+	// cleanup any special characters
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, ":", "-")
+
+	return name
 }
 
 //

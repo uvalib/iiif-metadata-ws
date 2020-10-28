@@ -18,7 +18,7 @@ var contentType = "application/json; charset=utf-8"
 // ServiceContext contains common data used by all handlers
 type ServiceContext struct {
 	config *serviceConfig
-	//solr   ServiceSolr
+	cache  *CacheProxy
 }
 
 // InitializeService will initialize the service context based on the config parameters.
@@ -28,6 +28,7 @@ func InitializeService(cfg *serviceConfig) *ServiceContext {
 
 	svc := ServiceContext{
 		config: cfg,
+		cache: NewCacheProxy( cfg ),
 	}
 	return &svc
 }
@@ -51,7 +52,7 @@ func (svc *ServiceContext) ConfigHandler(c *gin.Context) {
 	})
 }
 
-// Handle a request for / and return version info
+// VersionHandler returns service version information
 func (svc *ServiceContext) VersionHandler(c *gin.Context) {
 
 	build := "unknown"
@@ -68,6 +69,7 @@ func (svc *ServiceContext) VersionHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, vMap)
 }
 
+// HealthCheckHandler returns service health information (dummy for now, FIXME)
 func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"alive": "true"})
 }
@@ -88,29 +90,86 @@ func (svc *ServiceContext) ExistHandler(c *gin.Context) {
 	c.String(http.StatusOK, "IIIF Metadata exists for %s", pid)
 }
 
-// IiifHandler processes a request for IIIF presentation metadata
-func (svc *ServiceContext) IiifHandler(c *gin.Context) {
+// CacheHandler processes a request for cached IIIF presentation metadata
+func (svc *ServiceContext) CacheHandler(c *gin.Context) {
+
+	path := "pid"
 	pid := c.Param("pid")
+	unit := c.Query("unit")
+	refresh := c.Query("refresh")
+	key := cacheKey( path, pid, unit )
+	cacheUrl := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootUrl, svc.config.cacheBucket, key)
 
-	// initialize IIIF data struct
-	var data IIIF
-	data.IiifURL = svc.config.iiifURL
-	data.URL = fmt.Sprintf("https://%s/pid/%s", svc.config.hostName, pid)
-	data.MetadataPID = pid
-	data.Metadata = make(map[string]string)
+	// if the manifest is not in the cache or we recreating the cache explicitly
+	if refresh == "true" || svc.cache.IsInCache( key ) == false {
 
-	// generate the manifest data as appropriate
-	manifest, status, errorText := svc.generateManifest(pid, c.Query("unit"))
+		// generate the manifest data as appropriate
+		manifest, status, errorText := svc.generateManifest(cacheUrl, pid, unit)
 
-	// error case
-	if status != http.StatusOK {
-		c.String(status, errorText)
-		return
+		// error case
+		if status != http.StatusOK {
+			c.String(status, errorText)
+			return
+		}
+
+		// write it to the cache
+		err := svc.cache.WriteToCache( key, manifest )
+		if err != nil {
+			c.String(http.StatusInternalServerError, fmt.Sprintf("Error writing to cache: %s", err.Error()))
+			return
+		}
 	}
 
 	// happy day
-	c.Header(contentTypeHeader, contentType)
-	c.String(http.StatusOK, manifest)
+	vMap := make(map[string]string)
+	vMap["url"] = cacheUrl
+	c.JSON(http.StatusOK, vMap)
+}
+
+// IiifHandler processes a request for IIIF presentation metadata
+func (svc *ServiceContext) IiifHandler(c *gin.Context) {
+
+	path := "pid"
+	pid := c.Param("pid")
+	unit := c.Query("unit")
+	key := cacheKey( path, pid, unit )
+
+	// if the manifest is in the cache
+	if svc.cache.IsInCache( key ) == true {
+
+		// get it
+		manifest, err := svc.cache.ReadFromCache( key )
+		if err != nil {
+			c.String(http.StatusInternalServerError, fmt.Sprintf("Error reading from cache: %s", err.Error()))
+			return
+		}
+
+		// happy day
+		c.Header(contentTypeHeader, contentType)
+		c.String(http.StatusOK, manifest)
+
+	} else {
+
+		// generate the manifest data as appropriate
+		cacheUrl := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootUrl, svc.config.cacheBucket, key)
+		manifest, status, errorText := svc.generateManifest(cacheUrl, pid, unit)
+
+		// error case
+		if status != http.StatusOK {
+			c.String(status, errorText)
+			return
+		}
+
+		// write it to the cache
+		err := svc.cache.WriteToCache( key, manifest )
+		if err != nil {
+			c.String(http.StatusInternalServerError, fmt.Sprintf("Error writing to cache: %s", err.Error()))
+			return
+		}
+		// happy day
+		c.Header(contentTypeHeader, contentType)
+		c.String(http.StatusOK, manifest)
+	}
 }
 
 // ariesPingHandler handles requests to the aries endpoint with no params.
@@ -146,12 +205,12 @@ func (svc *ServiceContext) AriesLookupHandler(c *gin.Context) {
 //
 // generate the manifest content and return it or the http status and an error message
 //
-func (svc *ServiceContext) generateManifest(pid string, unit string) (string, int, string) {
+func (svc *ServiceContext) generateManifest(url string, pid string, unit string) (string, int, string) {
 
 	// initialize IIIF data struct
 	var data IIIF
 	data.IiifURL = svc.config.iiifURL
-	data.URL = fmt.Sprintf("https://%s/pid/%s", svc.config.hostName, pid)
+	data.URL = url
 	data.MetadataPID = pid
 	data.Metadata = make(map[string]string)
 
