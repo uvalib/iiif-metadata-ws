@@ -12,13 +12,14 @@ import (
 	"net/http"
 	"text/template"
 	"time"
-
-	"github.com/gin-gonic/gin"
 )
 
 var readTimeout = 45 // some of those Solr queries are realllllllyyyyy sloooowwwww
 var connTimeout = 5
 
+//
+// define our connection client
+//
 var httpClient = &http.Client{
 	Timeout: time.Duration(readTimeout) * time.Second,
 	Transport: &http.Transport{
@@ -32,45 +33,24 @@ var httpClient = &http.Client{
 	},
 }
 
-func getAPIResponse(url string) (string, error) {
-
-	resp, err := httpClient.Get(url)
-	if err != nil {
-		log.Printf("ERROR: issuing request: %s, %s", url, err.Error())
-		return "", err
-	}
-	defer resp.Body.Close()
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("ERROR: reading response: %s, %s", url, err.Error())
-		return "", err
-	}
-	respString := string(bodyBytes)
-	if resp.StatusCode != 200 {
-		log.Printf("ERROR: bad response: status code %d, endpoint %s", resp.StatusCode, url)
-		return "", errors.New(respString)
-	}
-	return respString, nil
-}
-
 // generateFromApollo will Generate the IIIF manifest from data found in Apollo
-func generateFromApollo(config *serviceConfig, data IIIF, c *gin.Context) {
+func generateFromApollo(config *serviceConfig, data IIIF) (string, int, string) {
 	// Get some metadata about the collection from Apollo API...
 	PID := data.MetadataPID
 	apolloURL := fmt.Sprintf("%s/items/%s", config.apolloURL, PID)
 	respStr, err := getAPIResponse(apolloURL)
 	if err != nil {
 		log.Printf("ERROR: apollo request failed: %s", err.Error())
-		c.String(http.StatusServiceUnavailable, "Unable communicate with Apollo: %s", err.Error())
-		return
+		//c.String(http.StatusServiceUnavailable, "Unable communicate with Apollo: %s", err.Error())
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable communicate with Apollo: %s", err.Error())
 	}
 
 	// Parse collection-level metadata from JSON response
 	err = getMetadataFromJSON(&data, respStr)
 	if err != nil {
 		log.Printf("ERROR: unable to parse apollo response: %s", err.Error())
-		c.String(http.StatusUnprocessableEntity, "Unable to parse Apollo Metadata: %s", err.Error())
-		return
+		//c.String(http.StatusUnprocessableEntity, "Unable to parse Apollo Metadata: %s", err.Error())
+		return "", http.StatusUnprocessableEntity, fmt.Sprintf("Unable to parse Apollo Metadata: %s", err.Error())
 	}
 
 	// Get masterFiles from TrackSys manifest API
@@ -78,13 +58,156 @@ func generateFromApollo(config *serviceConfig, data IIIF, c *gin.Context) {
 	respStr, err = getAPIResponse(tsURL)
 	if err != nil {
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
-		c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
-		return
+		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve manifest: %s", err.Error())
 	}
 
 	getMasterFilesFromJSON(&data, respStr)
+	var metadata string
+	metadata, err = renderIiifMetadata(data)
+	if err != nil {
+		//c.String(http.StatusInternalServerError, "Unable to render IIIF metadata: %s", err.Error())
+		return "", http.StatusInternalServerError, fmt.Sprintf("Unable to render IIIF metadata: %s", err.Error())
+	}
 
-	renderIiifMetadata(data, c)
+	// happy day
+	return metadata, http.StatusOK, ""
+}
+
+// generateFromXML wil generate the IIIF manifest from TrackSys XML Metadata
+func generateFromXML(config *serviceConfig, data IIIF) (string, int, string) {
+	err := getTrackSysMetadata(config, &data)
+	if err != nil {
+		log.Printf("ERROR: tracksys metadata request failed: %s", err.Error())
+		//c.String(http.StatusServiceUnavailable, "Unable retrieve metadata: %s", err.Error())
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve metadata: %s", err.Error())
+	}
+
+	err = parseTracksysSolr(config.tracksysURL, &data)
+	if err != nil {
+		log.Printf("ERROR: solr data request failed: %s", err.Error())
+		//c.String(http.StatusServiceUnavailable, "Unable retrieve solr data: %s", err.Error())
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve solr data: %s", err.Error())
+	}
+
+	// Get masterFiles from TrackSys manifest API that are hooked to this component
+	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
+	respStr, err := getAPIResponse(tsURL)
+	if err != nil {
+		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
+		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve manifest: %s", err.Error())
+	}
+
+	getMasterFilesFromJSON(&data, respStr)
+	var metadata string
+	metadata, err = renderIiifMetadata(data)
+	if err != nil {
+		//c.String(http.StatusInternalServerError, "Unable to render IIIF metadata: %s", err.Error())
+		return "", http.StatusInternalServerError, fmt.Sprintf("Unable to render IIIF metadata: %s", err.Error())
+	}
+
+	// happy day
+	return metadata, http.StatusOK, ""
+}
+
+// generateFromSirsi will generate the IIIF manifest for a SIRSI METADATA record
+func generateFromSirsi(config *serviceConfig, data IIIF, unitID int) (string, int, string) {
+	err := getTrackSysMetadata(config, &data)
+	if err != nil {
+		log.Printf("ERROR: tracksys metadata request failed: %s", err.Error())
+		//c.String(http.StatusServiceUnavailable, "Unable retrieve metadata: %s", err.Error())
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve metadata: %s", err.Error())
+	}
+
+	err = parseVirgoSolr(config.solrURL, &data)
+	if err != nil {
+		log.Printf("ERROR: solr data request failed: %s", err.Error())
+		//c.String(http.StatusServiceUnavailable, "Unable retrieve solr data: %s", err.Error())
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve solr data: %s", err.Error())
+	}
+
+	// Get data for all master files from units associated with the metadata record. Include unit if specified
+	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
+	if unitID > 0 {
+		tsURL = fmt.Sprintf("%s?unit=%d", tsURL, unitID)
+	}
+	respStr, err := getAPIResponse(tsURL)
+	if err != nil {
+		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
+		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve manifest: %s", err.Error())
+	}
+
+	getMasterFilesFromJSON(&data, respStr)
+	var metadata string
+	metadata, err = renderIiifMetadata(data)
+	if err != nil {
+		//c.String(http.StatusInternalServerError, "Unable to render IIIF metadata: %s", err.Error())
+		return "", http.StatusInternalServerError, fmt.Sprintf("Unable to render IIIF metadata: %s", err.Error())
+	}
+
+	// happy day
+	return metadata, http.StatusOK, ""
+}
+
+// generateFromExternal will generate the IIIF manifest for an external record
+func generateFromExternal(config *serviceConfig, data IIIF) (string, int, string) {
+	err := getTrackSysMetadata(config, &data)
+	if err != nil {
+		log.Printf("ERROR: tracksys metadata request failed: %s", err.Error())
+		//c.String(http.StatusServiceUnavailable, "Unable retrieve metadata: %s", err.Error())
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve metadata: %s", err.Error())
+	}
+
+	// Get data for all master files from units associated with the metadata record. Include unit if specified
+	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
+	respStr, err := getAPIResponse(tsURL)
+	if err != nil {
+		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
+		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve manifest: %s", err.Error())
+	}
+
+	getMasterFilesFromJSON(&data, respStr)
+	var metadata string
+	metadata, err = renderIiifMetadata(data)
+	if err != nil {
+		//c.String(http.StatusInternalServerError, "Unable to render IIIF metadata: %s", err.Error())
+		return "", http.StatusInternalServerError, fmt.Sprintf("Unable to render IIIF metadata: %s", err.Error())
+	}
+
+	// happy day
+	return metadata, http.StatusOK, ""
+}
+
+func generateFromComponent(config *serviceConfig, pid string, data IIIF) (string, int, string) {
+	err := getTrackSysMetadata(config, &data)
+	if err != nil {
+		log.Printf("ERROR: tracksys metadata request failed: %s", err.Error())
+		//c.String(http.StatusServiceUnavailable, "Unable retrieve metadata: %s", err.Error())
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve metadata: %s", err.Error())
+	}
+
+	// Get masterFiles from TrackSys manifest API that are hooked to this component
+	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, pid)
+	respStr, err := getAPIResponse(tsURL)
+	if err != nil {
+		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
+		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve manifest: %s", err.Error())
+	}
+
+	getMasterFilesFromJSON(&data, respStr)
+	var metadata string
+	metadata, err = renderIiifMetadata(data)
+	if err != nil {
+		//c.String(http.StatusInternalServerError, "Unable to render IIIF metadata: %s", err.Error())
+		return "", http.StatusInternalServerError, fmt.Sprintf("Unable to render IIIF metadata: %s", err.Error())
+	}
+
+	// happy day
+	return metadata, http.StatusOK, ""
 }
 
 func getTrackSysMetadata(config *serviceConfig, data *IIIF) error {
@@ -114,122 +237,43 @@ func getTrackSysMetadata(config *serviceConfig, data *IIIF) error {
 	return nil
 }
 
-// generateFromXML wil generate the IIIF manifest from TrackSys XML Metadata
-func generateFromXML(config *serviceConfig, data IIIF, c *gin.Context) {
-	err := getTrackSysMetadata(config, &data)
-	if err != nil {
-		log.Printf("ERROR: tracksys metadata request failed: %s", err.Error())
-		c.String(http.StatusServiceUnavailable, "Unable retrieve metadata: %s", err.Error())
-		return
-	}
+//
+// shared call to handle API calls
+//
+func getAPIResponse(url string) (string, error) {
 
-	err = parseTracksysSolr(config.tracksysURL, &data)
+	resp, err := httpClient.Get(url)
 	if err != nil {
-		log.Printf("ERROR: solr data request failed: %s", err.Error())
-		c.String(http.StatusServiceUnavailable, "Unable retrieve solr data: %s", err.Error())
-		return
+		log.Printf("ERROR: issuing request: %s, %s", url, err.Error())
+		return "", err
 	}
-
-	// Get masterFiles from TrackSys manifest API that are hooked to this component
-	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
-	respStr, err := getAPIResponse(tsURL)
+	defer resp.Body.Close()
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
-		c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
-		return
+		log.Printf("ERROR: reading response: %s, %s", url, err.Error())
+		return "", err
 	}
-
-	getMasterFilesFromJSON(&data, respStr)
-	renderIiifMetadata(data, c)
+	respString := string(bodyBytes)
+	if resp.StatusCode != 200 {
+		log.Printf("ERROR: bad response: status code %d, endpoint %s", resp.StatusCode, url)
+		return "", errors.New(respString)
+	}
+	return respString, nil
 }
 
-// generateFromSirsi will generate the IIIF manifest for a SIRSI METADATA record
-func generateFromSirsi(config *serviceConfig, data IIIF, c *gin.Context, unitID int) {
-	err := getTrackSysMetadata(config, &data)
-	if err != nil {
-		log.Printf("ERROR: tracksys metadata request failed: %s", err.Error())
-		c.String(http.StatusServiceUnavailable, "Unable retrieve metadata: %s", err.Error())
-		return
-	}
-
-	err = parseVirgoSolr(config.solrURL, &data)
-	if err != nil {
-		log.Printf("ERROR: solr data request failed: %s", err.Error())
-		c.String(http.StatusServiceUnavailable, "Unable retrieve solr data: %s", err.Error())
-		return
-	}
-
-	// Get data for all master files from units associated with the metadata record. Include unit if specified
-	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
-	if unitID > 0 {
-		tsURL = fmt.Sprintf("%s?unit=%d", tsURL, unitID)
-	}
-	respStr, err := getAPIResponse(tsURL)
-	if err != nil {
-		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
-		c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
-		return
-	}
-
-	getMasterFilesFromJSON(&data, respStr)
-	renderIiifMetadata(data, c)
-}
-
-// generateFromExternal will generate the IIIF manifest for an external record
-func generateFromExternal(config *serviceConfig, data IIIF, c *gin.Context) {
-	err := getTrackSysMetadata(config, &data)
-	if err != nil {
-		log.Printf("ERROR: tracksys metadata request failed: %s", err.Error())
-		c.String(http.StatusServiceUnavailable, "Unable retrieve metadata: %s", err.Error())
-		return
-	}
-
-	// Get data for all master files from units associated with the metadata record. Include unit if specified
-	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
-	respStr, err := getAPIResponse(tsURL)
-	if err != nil {
-		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
-		c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
-		return
-	}
-
-	getMasterFilesFromJSON(&data, respStr)
-	renderIiifMetadata(data, c)
-}
-
-func generateFromComponent(config *serviceConfig, pid string, data IIIF, c *gin.Context) {
-	err := getTrackSysMetadata(config, &data)
-	if err != nil {
-		log.Printf("ERROR: tracksys metadata request failed: %s", err.Error())
-		c.String(http.StatusServiceUnavailable, "Unable retrieve metadata: %s", err.Error())
-		return
-	}
-
-	// Get masterFiles from TrackSys manifest API that are hooked to this component
-	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, pid)
-	respStr, err := getAPIResponse(tsURL)
-	if err != nil {
-		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
-		c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
-		return
-	}
-
-	getMasterFilesFromJSON(&data, respStr)
-	renderIiifMetadata(data, c)
-}
-
-func renderIiifMetadata(data IIIF, c *gin.Context) {
+//
+// render metadata from the template
+//
+func renderIiifMetadata(data IIIF) (string, error) {
 	tmpl := template.Must(template.ParseFiles("templates/iiif.json"))
 	var outBuffer bytes.Buffer
 	err := tmpl.Execute(&outBuffer, data)
 	if err != nil {
 		log.Printf("ERROR: unable to render IIIF metadata for %s: %s", data.MetadataPID, err.Error())
-		c.String(http.StatusInternalServerError, "Unable to render IIIF metadata: %s", err.Error())
-		return
+		return "", err
 	}
 	log.Printf("INFO: IIIF Metadata generated for %s", data.MetadataPID)
-	c.Header("content-type", "application/json; charset=utf-8")
-	c.String(http.StatusOK, outBuffer.String())
+	return outBuffer.String(), nil
 }
 
 //

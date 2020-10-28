@@ -11,6 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// our content type definitions
+var contentTypeHeader = "content-type"
+var contentType = "application/json; charset=utf-8"
+
 // ServiceContext contains common data used by all handlers
 type ServiceContext struct {
 	config *serviceConfig
@@ -95,36 +99,18 @@ func (svc *ServiceContext) IiifHandler(c *gin.Context) {
 	data.MetadataPID = pid
 	data.Metadata = make(map[string]string)
 
-	// Tracksys is the system that tracks items that contain
-	// masterfiles. All pids the arrive at the IIIF service should
-	// refer to these items. Determine what type the PID is:
-	pidURL := fmt.Sprintf("%s/pid/%s/type", svc.config.tracksysURL, pid)
-	pidType, err := getAPIResponse(pidURL)
-	if err != nil {
-		c.String(http.StatusServiceUnavailable, "Unable to connect with TrackSys to identify pid %s", pid)
+	// generate the manifest data as appropriate
+	manifest, status, errorText := svc.generateManifest(pid, c.Query("unit"))
+
+	// error case
+	if status != http.StatusOK {
+		c.String(status, errorText)
 		return
 	}
 
-	if pidType == "sirsi_metadata" {
-		log.Printf("INFO: %s is a sirsi metadata record", pid)
-		unitID, _ := strconv.Atoi(c.Query("unit"))
-		generateFromSirsi(svc.config, data, c, unitID)
-	} else if pidType == "xml_metadata" {
-		log.Printf("INFO: %s is an xml metadata record", pid)
-		generateFromXML(svc.config, data, c)
-	} else if pidType == "apollo_metadata" {
-		log.Printf("INFO: %s is an apollo metadata record", pid)
-		generateFromApollo(svc.config, data, c)
-	} else if pidType == "archivesspace_metadata" || pidType == "jstor_metadata" {
-		log.Printf("INFO: %s is an as metadata record", pid)
-		generateFromExternal(svc.config, data, c)
-	} else if pidType == "component" {
-		log.Printf("INFO: %s is a component", pid)
-		generateFromComponent(svc.config, pid, data, c)
-	} else {
-		log.Printf("ERROR: couldn't find %s", pid)
-		c.String(http.StatusNotFound, "PID %s not found", pid)
-	}
+	// happy day
+	c.Header(contentTypeHeader, contentType)
+	c.String(http.StatusOK, manifest)
 }
 
 // ariesPingHandler handles requests to the aries endpoint with no params.
@@ -155,6 +141,48 @@ func (svc *ServiceContext) AriesLookupHandler(c *gin.Context) {
 		"identifier":  ids,
 		"service_url": []interface{}{s},
 	})
+}
+
+//
+// generate the manifest content and return it or the http status and an error message
+//
+func (svc *ServiceContext) generateManifest(pid string, unit string) (string, int, string) {
+
+	// initialize IIIF data struct
+	var data IIIF
+	data.IiifURL = svc.config.iiifURL
+	data.URL = fmt.Sprintf("https://%s/pid/%s", svc.config.hostName, pid)
+	data.MetadataPID = pid
+	data.Metadata = make(map[string]string)
+
+	// Tracksys is the system that tracks items that contain
+	// masterfiles. All pids the arrive at the IIIF service should
+	// refer to these items. Determine what type the PID is:
+	pidURL := fmt.Sprintf("%s/pid/%s/type", svc.config.tracksysURL, pid)
+	pidType, err := getAPIResponse(pidURL)
+	if err != nil {
+		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable to connect with TrackSys to identify pid %s", pid)
+	}
+
+	if pidType == "sirsi_metadata" {
+		log.Printf("INFO: %s is a sirsi metadata record", pid)
+		unitID, _ := strconv.Atoi(unit)
+		return generateFromSirsi(svc.config, data, unitID)
+	} else if pidType == "xml_metadata" {
+		log.Printf("INFO: %s is an xml metadata record", pid)
+		return generateFromXML(svc.config, data)
+	} else if pidType == "apollo_metadata" {
+		log.Printf("INFO: %s is an apollo metadata record", pid)
+		return generateFromApollo(svc.config, data)
+	} else if pidType == "archivesspace_metadata" || pidType == "jstor_metadata" {
+		log.Printf("INFO: %s is an as metadata record", pid)
+		return generateFromExternal(svc.config, data)
+	} else if pidType == "component" {
+		log.Printf("INFO: %s is a component", pid)
+		return generateFromComponent(svc.config, pid, data)
+	}
+	log.Printf("ERROR: couldn't find %s", pid)
+	return "", http.StatusNotFound, fmt.Sprintf("PID %s not found", pid)
 }
 
 //
