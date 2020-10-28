@@ -28,7 +28,7 @@ func InitializeService(cfg *serviceConfig) *ServiceContext {
 
 	svc := ServiceContext{
 		config: cfg,
-		cache: NewCacheProxy( cfg ),
+		cache:  NewCacheProxy(cfg),
 	}
 	return &svc
 }
@@ -97,11 +97,11 @@ func (svc *ServiceContext) CacheHandler(c *gin.Context) {
 	pid := c.Param("pid")
 	unit := c.Query("unit")
 	refresh := c.Query("refresh")
-	key := cacheKey( path, pid, unit )
+	key := cacheKey(path, pid, unit)
 	cacheUrl := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootUrl, svc.config.cacheBucket, key)
 
 	// if the manifest is not in the cache or we recreating the cache explicitly
-	if refresh == "true" || svc.cache.IsInCache( key ) == false {
+	if refresh == "true" || svc.cache.IsInCache(key) == false {
 
 		// generate the manifest data as appropriate
 		manifest, status, errorText := svc.generateManifest(cacheUrl, pid, unit)
@@ -113,7 +113,7 @@ func (svc *ServiceContext) CacheHandler(c *gin.Context) {
 		}
 
 		// write it to the cache
-		err := svc.cache.WriteToCache( key, manifest )
+		err := svc.cache.WriteToCache(key, manifest)
 		if err != nil {
 			c.String(http.StatusInternalServerError, fmt.Sprintf("Error writing to cache: %s", err.Error()))
 			return
@@ -132,13 +132,13 @@ func (svc *ServiceContext) IiifHandler(c *gin.Context) {
 	path := "pid"
 	pid := c.Param("pid")
 	unit := c.Query("unit")
-	key := cacheKey( path, pid, unit )
+	key := cacheKey(path, pid, unit)
 
 	// if the manifest is in the cache
-	if svc.cache.IsInCache( key ) == true {
+	if svc.cache.IsInCache(key) == true {
 
 		// get it
-		manifest, err := svc.cache.ReadFromCache( key )
+		manifest, err := svc.cache.ReadFromCache(key)
 		if err != nil {
 			c.String(http.StatusInternalServerError, fmt.Sprintf("Error reading from cache: %s", err.Error()))
 			return
@@ -161,7 +161,7 @@ func (svc *ServiceContext) IiifHandler(c *gin.Context) {
 		}
 
 		// write it to the cache
-		err := svc.cache.WriteToCache( key, manifest )
+		err := svc.cache.WriteToCache(key, manifest)
 		if err != nil {
 			c.String(http.StatusInternalServerError, fmt.Sprintf("Error writing to cache: %s", err.Error()))
 			return
