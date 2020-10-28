@@ -127,3 +127,7 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) {
 		pgNum++
 	}
 }
+
+//
+// end of file
+//

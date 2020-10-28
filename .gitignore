@@ -9,5 +9,5 @@ dist
 # Ignore application configuration
 run.sh
 .idea
-buildtag.*
 package/scripts/*.ksh
+env.*

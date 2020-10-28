@@ -9,11 +9,11 @@ import (
 	xmlpath "gopkg.in/xmlpath.v2"
 )
 
-// parseMARC will extract physicsl description from MARC string
+// parseMARC will extract physical description from MARC string
 func parseMARC(data *IIIF, marc string) {
 	xmlRoot, err := xmlpath.Parse(strings.NewReader(marc))
 	if err != nil {
-		log.Printf("WARNING: Unable to parse MARC: %s; skipping", err.Error())
+		log.Printf("WARNING: unable to parse MARC: %s; skipping", err.Error())
 		return
 	}
 	path := xmlpath.MustCompile("//datafield[@tag='300']/subfield")
@@ -35,7 +35,7 @@ func parseVirgoSolr(virgoURL string, data *IIIF) error {
 
 	xmlRoot, parseErr := xmlpath.Parse(strings.NewReader(resp))
 	if parseErr != nil {
-		log.Printf("ERROR: Unable to parse response: %s", parseErr.Error())
+		log.Printf("ERROR: unable to parse response: %s", parseErr.Error())
 		log.Printf("BODY: %s", resp)
 		return parseErr
 	}
@@ -138,3 +138,7 @@ func getArrayValues(nodes *xmlpath.Iter, sep string) string {
 	}
 	return buffer.String()
 }
+
+//
+// end of file
+//
