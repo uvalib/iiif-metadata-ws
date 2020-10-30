@@ -47,7 +47,7 @@ func (svc *ServiceContext) ConfigHandler(c *gin.Context) {
 		"service_host": svc.config.hostName,
 		"apollo":       svc.config.apolloURL,
 		"tracksys":     svc.config.tracksysURL,
-		"solr":         svc.config.solrURL,
+		//"solr":         svc.config.solrURL,
 		"iiif":         svc.config.iiifURL,
 	})
 }
