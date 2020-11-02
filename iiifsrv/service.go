@@ -71,14 +71,45 @@ func (svc *ServiceContext) VersionHandler(c *gin.Context) {
 
 // HealthCheckHandler returns service health information (dummy for now, FIXME)
 func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"alive": "true"})
+
+	type healthcheck struct {
+		Healthy bool
+		Message string
+	}
+	log.Printf("INFO: checking Tracksys...")
+	url := fmt.Sprintf("%s/api/pid/uva-lib:1157560/type", svc.config.tracksysURL)
+
+	tsStatus := healthcheck{ true, "" }
+	_, err := getAPIResponse( url, fastHttpClient )
+	if err != nil {
+		tsStatus.Healthy = false
+		tsStatus.Message = err.Error()
+	}
+
+	// make sure apollo service is alive
+	log.Printf("INFO: checking Apollo...")
+	url = fmt.Sprintf( "%s/version", svc.config.apolloURL)
+	apolloStatus := healthcheck{ true, "" }
+
+	_, err = getAPIResponse( url, fastHttpClient )
+	if err != nil {
+		apolloStatus.Healthy = false
+		apolloStatus.Message = err.Error()
+	}
+
+	httpStatus := http.StatusOK
+	if tsStatus.Healthy == false || apolloStatus.Healthy == false {
+		httpStatus = http.StatusInternalServerError
+	}
+
+	c.JSON(httpStatus, gin.H{"tracksys": tsStatus, "apollo": apolloStatus})
 }
 
 // ExistHandler checks if there is IIIF data available for a PID
 func (svc *ServiceContext) ExistHandler(c *gin.Context) {
 	pid := c.Param("pid")
-	pidURL := fmt.Sprintf("%s/pid/%s/type", svc.config.tracksysURL, pid)
-	resp, err := getAPIResponse(pidURL)
+	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, pid)
+	resp, err := getAPIResponse(pidURL, standardHttpClient)
 	if err != nil {
 		c.String(http.StatusNotFound, "IIIF Metadata does not exist for %s", pid)
 		return
@@ -182,10 +213,10 @@ func (svc *ServiceContext) AriesPingHandler(c *gin.Context) {
 func (svc *ServiceContext) AriesLookupHandler(c *gin.Context) {
 
 	id := c.Param("id")
-	pidURL := fmt.Sprintf("%s/pid/%s/type", svc.config.tracksysURL, id)
-	pidType, err := getAPIResponse(pidURL)
+	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, id)
+	pidType, err := getAPIResponse(pidURL, standardHttpClient)
 	if err != nil {
-		log.Printf("ERROR: request to TrackSys %s failed: %s", svc.config.tracksysURL, err.Error())
+		log.Printf("ERROR: request to TrackSys %s failed: %s", pidURL, err.Error())
 		c.String(http.StatusNotFound, "id %s not found", id)
 		return
 	}
@@ -217,8 +248,8 @@ func (svc *ServiceContext) generateManifest(url string, pid string, unit string)
 	// Tracksys is the system that tracks items that contain
 	// masterfiles. All pids the arrive at the IIIF service should
 	// refer to these items. Determine what type the PID is:
-	pidURL := fmt.Sprintf("%s/pid/%s/type", svc.config.tracksysURL, pid)
-	pidType, err := getAPIResponse(pidURL)
+	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, pid)
+	pidType, err := getAPIResponse(pidURL, standardHttpClient)
 	if err != nil {
 		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable to connect with TrackSys to identify pid %s", pid)
 	}

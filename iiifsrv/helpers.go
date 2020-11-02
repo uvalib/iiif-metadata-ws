@@ -19,9 +19,11 @@ var readTimeout = 45 // some of those Solr queries are realllllllyyyyy sloooowww
 var connTimeout = 5
 
 //
-// define our connection client
+// define our connection clients
 //
-var httpClient = &http.Client{
+
+// standard client used for normal requests
+var standardHttpClient = &http.Client{
 	Timeout: time.Duration(readTimeout) * time.Second,
 	Transport: &http.Transport{
 		DialContext: (&net.Dialer{
@@ -34,12 +36,26 @@ var httpClient = &http.Client{
 	},
 }
 
+// used for healthcheck connections
+var fastHttpClient = &http.Client{
+	Timeout: time.Duration(5) * time.Second,
+	Transport: &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   time.Duration(5) * time.Second,
+			KeepAlive: 60 * time.Second,
+		}).DialContext,
+		MaxIdleConns:        50,
+		MaxIdleConnsPerHost: 50,
+		IdleConnTimeout:     90 * time.Second,
+	},
+}
+
 // generateFromApollo will Generate the IIIF manifest from data found in Apollo
 func generateFromApollo(config *serviceConfig, data IIIF) (string, int, string) {
 	// Get some metadata about the collection from Apollo API...
 	PID := data.MetadataPID
-	apolloURL := fmt.Sprintf("%s/items/%s", config.apolloURL, PID)
-	respStr, err := getAPIResponse(apolloURL)
+	apolloURL := fmt.Sprintf("%s/api/items/%s", config.apolloURL, PID)
+	respStr, err := getAPIResponse(apolloURL, standardHttpClient)
 	if err != nil {
 		log.Printf("ERROR: apollo request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable communicate with Apollo: %s", err.Error())
@@ -55,8 +71,8 @@ func generateFromApollo(config *serviceConfig, data IIIF) (string, int, string) 
 	}
 
 	// Get masterFiles from TrackSys manifest API
-	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
-	respStr, err = getAPIResponse(tsURL)
+	tsURL := fmt.Sprintf("%s/api/manifest/%s", config.tracksysURL, data.MetadataPID)
+	respStr, err = getAPIResponse(tsURL, standardHttpClient)
 	if err != nil {
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
@@ -92,8 +108,8 @@ func generateFromXML(config *serviceConfig, data IIIF) (string, int, string) {
 	}
 
 	// Get masterFiles from TrackSys manifest API that are hooked to this component
-	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
-	respStr, err := getAPIResponse(tsURL)
+	tsURL := fmt.Sprintf("%s/api/manifest/%s", config.tracksysURL, data.MetadataPID)
+	respStr, err := getAPIResponse(tsURL, standardHttpClient)
 	if err != nil {
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
@@ -129,11 +145,11 @@ func generateFromSirsi(config *serviceConfig, data IIIF, unitID int) (string, in
 //	}
 
 	// Get data for all master files from units associated with the metadata record. Include unit if specified
-	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
+	tsURL := fmt.Sprintf("%s/api/manifest/%s", config.tracksysURL, data.MetadataPID)
 	if unitID > 0 {
 		tsURL = fmt.Sprintf("%s?unit=%d", tsURL, unitID)
 	}
-	respStr, err := getAPIResponse(tsURL)
+	respStr, err := getAPIResponse(tsURL, standardHttpClient)
 	if err != nil {
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
@@ -162,8 +178,8 @@ func generateFromExternal(config *serviceConfig, data IIIF) (string, int, string
 	}
 
 	// Get data for all master files from units associated with the metadata record. Include unit if specified
-	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, data.MetadataPID)
-	respStr, err := getAPIResponse(tsURL)
+	tsURL := fmt.Sprintf("%s/api/manifest/%s", config.tracksysURL, data.MetadataPID)
+	respStr, err := getAPIResponse(tsURL, standardHttpClient)
 	if err != nil {
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
@@ -191,8 +207,8 @@ func generateFromComponent(config *serviceConfig, pid string, data IIIF) (string
 	}
 
 	// Get masterFiles from TrackSys manifest API that are hooked to this component
-	tsURL := fmt.Sprintf("%s/manifest/%s", config.tracksysURL, pid)
-	respStr, err := getAPIResponse(tsURL)
+	tsURL := fmt.Sprintf("%s/api/manifest/%s", config.tracksysURL, pid)
+	respStr, err := getAPIResponse(tsURL, standardHttpClient)
 	if err != nil {
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
@@ -212,8 +228,8 @@ func generateFromComponent(config *serviceConfig, pid string, data IIIF) (string
 }
 
 func getTrackSysMetadata(config *serviceConfig, data *IIIF) error {
-	tsURL := fmt.Sprintf("%s/metadata/%s?type=brief", config.tracksysURL, data.MetadataPID)
-	respStr, err := getAPIResponse(tsURL)
+	tsURL := fmt.Sprintf("%s/api/metadata/%s?type=brief", config.tracksysURL, data.MetadataPID)
+	respStr, err := getAPIResponse(tsURL, standardHttpClient)
 	if err != nil {
 		return err
 	}
@@ -241,7 +257,7 @@ func getTrackSysMetadata(config *serviceConfig, data *IIIF) error {
 //
 // shared call to handle API calls
 //
-func getAPIResponse(url string) (string, error) {
+func getAPIResponse(url string, httpClient *http.Client) (string, error) {
 
 	resp, err := httpClient.Get(url)
 	if err != nil {
