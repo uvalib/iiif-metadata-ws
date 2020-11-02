@@ -137,12 +137,12 @@ func generateFromSirsi(config *serviceConfig, data IIIF, unitID int) (string, in
 		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve metadata: %s", err.Error())
 	}
 
-//	err = parseVirgoSolr(config.solrURL, &data)
-//	if err != nil {
-//		log.Printf("ERROR: solr data request failed: %s", err.Error())
-//		//c.String(http.StatusServiceUnavailable, "Unable retrieve solr data: %s", err.Error())
-//		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve solr data: %s", err.Error())
-//	}
+	//	err = parseVirgoSolr(config.solrURL, &data)
+	//	if err != nil {
+	//		log.Printf("ERROR: solr data request failed: %s", err.Error())
+	//		//c.String(http.StatusServiceUnavailable, "Unable retrieve solr data: %s", err.Error())
+	//		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve solr data: %s", err.Error())
+	//	}
 
 	// Get data for all master files from units associated with the metadata record. Include unit if specified
 	tsURL := fmt.Sprintf("%s/api/manifest/%s", config.tracksysURL, data.MetadataPID)

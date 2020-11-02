@@ -48,7 +48,7 @@ func (svc *ServiceContext) ConfigHandler(c *gin.Context) {
 		"apollo":       svc.config.apolloURL,
 		"tracksys":     svc.config.tracksysURL,
 		//"solr":         svc.config.solrURL,
-		"iiif":         svc.config.iiifURL,
+		"iiif": svc.config.iiifURL,
 	})
 }
 
@@ -73,14 +73,14 @@ func (svc *ServiceContext) VersionHandler(c *gin.Context) {
 func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 
 	type healthcheck struct {
-		Healthy bool
-		Message string
+		Healthy bool   `json:"healthy"`
+		Message string `json:"message"`
 	}
 	log.Printf("INFO: checking Tracksys...")
 	url := fmt.Sprintf("%s/api/pid/uva-lib:1157560/type", svc.config.tracksysURL)
 
-	tsStatus := healthcheck{ true, "" }
-	_, err := getAPIResponse( url, fastHttpClient )
+	tsStatus := healthcheck{true, ""}
+	_, err := getAPIResponse(url, fastHttpClient)
 	if err != nil {
 		tsStatus.Healthy = false
 		tsStatus.Message = err.Error()
@@ -88,10 +88,10 @@ func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 
 	// make sure apollo service is alive
 	log.Printf("INFO: checking Apollo...")
-	url = fmt.Sprintf( "%s/version", svc.config.apolloURL)
-	apolloStatus := healthcheck{ true, "" }
+	url = fmt.Sprintf("%s/version", svc.config.apolloURL)
+	apolloStatus := healthcheck{true, ""}
 
-	_, err = getAPIResponse( url, fastHttpClient )
+	_, err = getAPIResponse(url, fastHttpClient)
 	if err != nil {
 		apolloStatus.Healthy = false
 		apolloStatus.Message = err.Error()

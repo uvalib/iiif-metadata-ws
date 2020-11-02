@@ -7,8 +7,8 @@ import (
 
 // configuration data
 type serviceConfig struct {
-	port         int
-	hostName     string
+	port     int
+	hostName string
 	//solrURL      string
 	tracksysURL  string
 	apolloURL    string

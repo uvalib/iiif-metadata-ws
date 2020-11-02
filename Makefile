@@ -17,7 +17,7 @@ linux-full: linux copy-supporting
 all: darwin linux copy-supporting
 
 darwin:
-	GOOS=darwin GOARCH=amd64 $(GOBUILD) -a -o bin/$(BASE_NAME).darwin $(SRC_TREE)/*.go
+	GOOS=darwin GOARCH=amd64 $(GOBUILD) -a -race -o bin/$(BASE_NAME).darwin $(SRC_TREE)/*.go
 
 copy-supporting:
 	cp -R  templates/ bin/templates
