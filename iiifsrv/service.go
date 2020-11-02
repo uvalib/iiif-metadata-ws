@@ -107,17 +107,26 @@ func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 
 // ExistHandler checks if there is IIIF data available for a PID
 func (svc *ServiceContext) ExistHandler(c *gin.Context) {
+
+	path := "pid"
 	pid := c.Param("pid")
+	unit := c.Query("unit")
+	key := cacheKey(path, pid, unit)
+
+	// if the manifest is already in the cache then return
+	if svc.cache.IsInCache(key) == true {
+		c.String(http.StatusOK, "IIIF Metadata exists for %s", pid)
+		return
+	}
+
+	// otherwise, check tracksys to see if it knows about this item
 	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, pid)
 	resp, err := getAPIResponse(pidURL, standardHttpClient)
-	if err != nil {
+	if err != nil || resp == "masterfile" {
 		c.String(http.StatusNotFound, "IIIF Metadata does not exist for %s", pid)
 		return
 	}
-	if resp == "masterfile" {
-		c.String(http.StatusNotFound, "IIIF Metadata does not exist for %s", pid)
-		return
-	}
+
 	c.String(http.StatusOK, "IIIF Metadata exists for %s", pid)
 }
 
