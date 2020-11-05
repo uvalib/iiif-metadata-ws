@@ -271,8 +271,13 @@ func getAPIResponse(url string, httpClient *http.Client) (string, error) {
 		return "", err
 	}
 	respString := string(bodyBytes)
-	if resp.StatusCode != 200 {
-		log.Printf("ERROR: bad response: status code %d, endpoint %s", resp.StatusCode, url)
+	if resp.StatusCode != http.StatusOK {
+		logLevel := "ERROR"
+		// some errors are expected
+		if resp.StatusCode == http.StatusNotFound {
+			logLevel = "INFO"
+		}
+		log.Printf("%s: %s returns %d (%s)", logLevel, url, resp.StatusCode, respString)
 		return "", errors.New(respString)
 	}
 	return respString, nil
