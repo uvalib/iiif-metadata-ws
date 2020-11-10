@@ -28,7 +28,9 @@ func InitializeService(cfg *serviceConfig) *ServiceContext {
 
 	svc := ServiceContext{
 		config: cfg,
-		cache:  NewCacheProxy(cfg),
+	}
+	if cfg.cacheDisabled == false {
+		svc.cache = NewCacheProxy(cfg)
 	}
 	return &svc
 }
@@ -47,8 +49,7 @@ func (svc *ServiceContext) ConfigHandler(c *gin.Context) {
 		"service_host": svc.config.hostName,
 		"apollo":       svc.config.apolloURL,
 		"tracksys":     svc.config.tracksysURL,
-		//"solr":         svc.config.solrURL,
-		"iiif": svc.config.iiifURL,
+		"iiif":         svc.config.iiifURL,
 	})
 }
 
@@ -80,7 +81,7 @@ func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 	url := fmt.Sprintf("%s/api/pid/uva-lib:1157560/type", svc.config.tracksysURL)
 
 	tsStatus := healthcheck{true, ""}
-	_, err := getAPIResponse(url, fastHttpClient)
+	_, err := getAPIResponse(url, fastHTTPClient)
 	if err != nil {
 		tsStatus.Healthy = false
 		tsStatus.Message = err.Error()
@@ -91,7 +92,7 @@ func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 	url = fmt.Sprintf("%s/version", svc.config.apolloURL)
 	apolloStatus := healthcheck{true, ""}
 
-	_, err = getAPIResponse(url, fastHttpClient)
+	_, err = getAPIResponse(url, fastHTTPClient)
 	if err != nil {
 		apolloStatus.Healthy = false
 		apolloStatus.Message = err.Error()
@@ -107,44 +108,53 @@ func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 
 // ExistHandler checks if there is IIIF data available for a PID
 func (svc *ServiceContext) ExistHandler(c *gin.Context) {
-
 	path := "pid"
 	pid := c.Param("pid")
 	unit := c.Query("unit")
 	key := cacheKey(path, pid, unit)
 
 	// if the manifest is already in the cache then return
-	if svc.cache.IsInCache(key) == true {
-		c.String(http.StatusOK, "IIIF Metadata exists for %s", pid)
-		return
+	if svc.config.cacheDisabled == false {
+		if svc.cache.IsInCache(key) == true {
+			c.String(http.StatusOK, "Cached IIIF Metadata exists for %s", pid)
+			return
+		}
+	} else {
+		log.Printf("IIIF Cache is disabled")
 	}
 
 	// otherwise, check tracksys to see if it knows about this item
 	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, pid)
-	resp, err := getAPIResponse(pidURL, standardHttpClient)
+	resp, err := getAPIResponse(pidURL, standardHTTPClient)
 	if err != nil || resp == "masterfile" {
 		c.String(http.StatusNotFound, "IIIF Metadata does not exist for %s", pid)
 		return
 	}
 
+	log.Printf("IIIF Metadata exists for %s", pid)
 	c.String(http.StatusOK, "IIIF Metadata exists for %s", pid)
 }
 
 // CacheHandler processes a request for cached IIIF presentation metadata
 func (svc *ServiceContext) CacheHandler(c *gin.Context) {
+	if svc.config.cacheDisabled == true {
+		log.Printf("WARN: Request for cached item when cache is disabled")
+		c.String(http.StatusFailedDependency, "cache is disabled")
+		return
+	}
 
 	path := "pid"
 	pid := c.Param("pid")
 	unit := c.Query("unit")
 	refresh := c.Query("refresh")
 	key := cacheKey(path, pid, unit)
-	cacheUrl := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootUrl, svc.config.cacheBucket, key)
+	cacheURL := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootURL, svc.config.cacheBucket, key)
 
 	// if the manifest is not in the cache or we recreating the cache explicitly
 	if refresh == "true" || svc.cache.IsInCache(key) == false {
 
 		// generate the manifest data as appropriate
-		manifest, status, errorText := svc.generateManifest(cacheUrl, pid, unit)
+		manifest, status, errorText := svc.generateManifest(cacheURL, pid, unit)
 
 		// error case
 		if status != http.StatusOK {
@@ -162,7 +172,7 @@ func (svc *ServiceContext) CacheHandler(c *gin.Context) {
 
 	// happy day
 	vMap := make(map[string]string)
-	vMap["url"] = cacheUrl
+	vMap["url"] = cacheURL
 	c.JSON(http.StatusOK, vMap)
 }
 
@@ -175,7 +185,7 @@ func (svc *ServiceContext) IiifHandler(c *gin.Context) {
 	key := cacheKey(path, pid, unit)
 
 	// if the manifest is in the cache
-	if svc.cache.IsInCache(key) == true {
+	if svc.config.cacheDisabled == false && svc.cache.IsInCache(key) == true {
 
 		// get it
 		manifest, err := svc.cache.ReadFromCache(key)
@@ -191,8 +201,8 @@ func (svc *ServiceContext) IiifHandler(c *gin.Context) {
 	} else {
 
 		// generate the manifest data as appropriate
-		cacheUrl := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootUrl, svc.config.cacheBucket, key)
-		manifest, status, errorText := svc.generateManifest(cacheUrl, pid, unit)
+		cacheURL := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootURL, svc.config.cacheBucket, key)
+		manifest, status, errorText := svc.generateManifest(cacheURL, pid, unit)
 
 		// error case
 		if status != http.StatusOK {
@@ -201,29 +211,32 @@ func (svc *ServiceContext) IiifHandler(c *gin.Context) {
 		}
 
 		// write it to the cache
-		err := svc.cache.WriteToCache(key, manifest)
-		if err != nil {
-			c.String(http.StatusInternalServerError, fmt.Sprintf("Error writing to cache: %s", err.Error()))
-			return
+		if svc.config.cacheDisabled == false {
+			err := svc.cache.WriteToCache(key, manifest)
+			if err != nil {
+				c.String(http.StatusInternalServerError, fmt.Sprintf("Error writing to cache: %s", err.Error()))
+				return
+			}
 		}
+
 		// happy day
 		c.Header(contentTypeHeader, contentType)
 		c.String(http.StatusOK, manifest)
 	}
 }
 
-// ariesPingHandler handles requests to the aries endpoint with no params.
+// AriesPingHandler handles requests to the aries endpoint with no params.
 // Just returns and alive message
 func (svc *ServiceContext) AriesPingHandler(c *gin.Context) {
 	c.String(http.StatusOK, "IIIF Manifest Service Aries API")
 }
 
-// ariesLookupHandler will query apollo for information on the supplied identifer
+// AriesLookupHandler will query apollo for information on the supplied identifer
 func (svc *ServiceContext) AriesLookupHandler(c *gin.Context) {
 
 	id := c.Param("id")
 	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, id)
-	pidType, err := getAPIResponse(pidURL, standardHttpClient)
+	pidType, err := getAPIResponse(pidURL, standardHTTPClient)
 	if err != nil {
 		log.Printf("ERROR: request to TrackSys %s failed: %s", pidURL, err.Error())
 		c.String(http.StatusNotFound, "id %s not found", id)
@@ -258,7 +271,7 @@ func (svc *ServiceContext) generateManifest(url string, pid string, unit string)
 	// masterfiles. All pids the arrive at the IIIF service should
 	// refer to these items. Determine what type the PID is:
 	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, pid)
-	pidType, err := getAPIResponse(pidURL, standardHttpClient)
+	pidType, err := getAPIResponse(pidURL, standardHTTPClient)
 	if err != nil {
 		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable to connect with TrackSys to identify pid %s", pid)
 	}

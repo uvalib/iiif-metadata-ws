@@ -23,7 +23,7 @@ var connTimeout = 5
 //
 
 // standard client used for normal requests
-var standardHttpClient = &http.Client{
+var standardHTTPClient = &http.Client{
 	Timeout: time.Duration(readTimeout) * time.Second,
 	Transport: &http.Transport{
 		DialContext: (&net.Dialer{
@@ -37,7 +37,7 @@ var standardHttpClient = &http.Client{
 }
 
 // used for healthcheck connections
-var fastHttpClient = &http.Client{
+var fastHTTPClient = &http.Client{
 	Timeout: time.Duration(5) * time.Second,
 	Transport: &http.Transport{
 		DialContext: (&net.Dialer{
@@ -55,7 +55,7 @@ func generateFromApollo(config *serviceConfig, data IIIF) (string, int, string) 
 	// Get some metadata about the collection from Apollo API...
 	PID := data.MetadataPID
 	apolloURL := fmt.Sprintf("%s/api/items/%s", config.apolloURL, PID)
-	respStr, err := getAPIResponse(apolloURL, standardHttpClient)
+	respStr, err := getAPIResponse(apolloURL, standardHTTPClient)
 	if err != nil {
 		log.Printf("ERROR: apollo request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable communicate with Apollo: %s", err.Error())
@@ -72,7 +72,7 @@ func generateFromApollo(config *serviceConfig, data IIIF) (string, int, string) 
 
 	// Get masterFiles from TrackSys manifest API
 	tsURL := fmt.Sprintf("%s/api/manifest/%s", config.tracksysURL, data.MetadataPID)
-	respStr, err = getAPIResponse(tsURL, standardHttpClient)
+	respStr, err = getAPIResponse(tsURL, standardHTTPClient)
 	if err != nil {
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
@@ -109,7 +109,7 @@ func generateFromXML(config *serviceConfig, data IIIF) (string, int, string) {
 
 	// Get masterFiles from TrackSys manifest API that are hooked to this component
 	tsURL := fmt.Sprintf("%s/api/manifest/%s", config.tracksysURL, data.MetadataPID)
-	respStr, err := getAPIResponse(tsURL, standardHttpClient)
+	respStr, err := getAPIResponse(tsURL, standardHTTPClient)
 	if err != nil {
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
@@ -149,7 +149,7 @@ func generateFromSirsi(config *serviceConfig, data IIIF, unitID int) (string, in
 	if unitID > 0 {
 		tsURL = fmt.Sprintf("%s?unit=%d", tsURL, unitID)
 	}
-	respStr, err := getAPIResponse(tsURL, standardHttpClient)
+	respStr, err := getAPIResponse(tsURL, standardHTTPClient)
 	if err != nil {
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
@@ -179,7 +179,7 @@ func generateFromExternal(config *serviceConfig, data IIIF) (string, int, string
 
 	// Get data for all master files from units associated with the metadata record. Include unit if specified
 	tsURL := fmt.Sprintf("%s/api/manifest/%s", config.tracksysURL, data.MetadataPID)
-	respStr, err := getAPIResponse(tsURL, standardHttpClient)
+	respStr, err := getAPIResponse(tsURL, standardHTTPClient)
 	if err != nil {
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
@@ -208,7 +208,7 @@ func generateFromComponent(config *serviceConfig, pid string, data IIIF) (string
 
 	// Get masterFiles from TrackSys manifest API that are hooked to this component
 	tsURL := fmt.Sprintf("%s/api/manifest/%s", config.tracksysURL, pid)
-	respStr, err := getAPIResponse(tsURL, standardHttpClient)
+	respStr, err := getAPIResponse(tsURL, standardHTTPClient)
 	if err != nil {
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
@@ -229,7 +229,7 @@ func generateFromComponent(config *serviceConfig, pid string, data IIIF) (string
 
 func getTrackSysMetadata(config *serviceConfig, data *IIIF) error {
 	tsURL := fmt.Sprintf("%s/api/metadata/%s?type=brief", config.tracksysURL, data.MetadataPID)
-	respStr, err := getAPIResponse(tsURL, standardHttpClient)
+	respStr, err := getAPIResponse(tsURL, standardHTTPClient)
 	if err != nil {
 		return err
 	}

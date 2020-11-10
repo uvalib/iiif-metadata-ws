@@ -3,9 +3,10 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws"
 	"log"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -20,7 +21,7 @@ type CacheProxy struct {
 	downloader *s3manager.Downloader
 }
 
-// InitializeService will initialize the service context based on the config parameters.
+// NewCacheProxy sets up a new S3 session
 func NewCacheProxy(cfg *serviceConfig) *CacheProxy {
 
 	proxy := CacheProxy{}

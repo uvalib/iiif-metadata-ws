@@ -81,7 +81,7 @@ func parseTracksysSolr(tracksysURL string, data *IIIF) error {
 	// For XML metadata
 	url := fmt.Sprintf("%s/api/solr/%s?no_external=1", tracksysURL, data.MetadataPID)
 	log.Printf("INFO: get Solr record: %s", url)
-	resp, err := getAPIResponse(url, standardHttpClient)
+	resp, err := getAPIResponse(url, standardHTTPClient)
 	if err != nil {
 		return err
 	}

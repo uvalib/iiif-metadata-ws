@@ -10,7 +10,6 @@
    "metadata": {{.JSONMetadata}},
    {{- end}}
    "license":"{{.License}}",
-   "attribution":"Provided by the University of Virginia Library",
    "logo":"{{.IiifURL}}/iiif/static:1/full/full/0/default.jpg",
    "related":"http://search.lib.virginia.edu/catalog/{{.VirgoKey}}",
    "sequences":[
