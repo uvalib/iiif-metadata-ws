@@ -196,6 +196,7 @@ func (svc *ServiceContext) IiifHandler(c *gin.Context) {
 
 		// happy day
 		c.Header(contentTypeHeader, contentType)
+		c.Header("Cache-Control", "no-store")
 		c.String(http.StatusOK, manifest)
 
 	} else {
