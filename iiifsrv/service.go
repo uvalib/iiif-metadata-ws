@@ -255,46 +255,14 @@ func (svc *ServiceContext) AriesLookupHandler(c *gin.Context) {
 	})
 }
 
-//
-// generate the manifest content and return it or the http status and an error message
-//
+// generateManifest will generate the manifest content and return it or the http status and an error message
 func (svc *ServiceContext) generateManifest(url string, pid string, unit string) (string, int, string) {
-
-	// initialize IIIF data struct
 	var data IIIF
 	data.IiifURL = svc.config.iiifURL
 	data.URL = url
 	data.MetadataPID = pid
-	data.Metadata = make(map[string]string)
-
-	// Tracksys is the system that tracks items that contain
-	// masterfiles. All pids the arrive at the IIIF service should
-	// refer to these items. Determine what type the PID is:
-	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, pid)
-	pidType, err := getAPIResponse(pidURL, standardHTTPClient)
-	if err != nil {
-		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable to connect with TrackSys to identify pid %s", pid)
-	}
-
-	if pidType == "sirsi_metadata" {
-		log.Printf("INFO: %s is a sirsi metadata record", pid)
-		unitID, _ := strconv.Atoi(unit)
-		return generateFromSirsi(svc.config, data, unitID)
-	} else if pidType == "xml_metadata" {
-		log.Printf("INFO: %s is an xml metadata record", pid)
-		return generateFromXML(svc.config, data)
-	} else if pidType == "apollo_metadata" {
-		log.Printf("INFO: %s is an apollo metadata record", pid)
-		return generateFromApollo(svc.config, data)
-	} else if pidType == "archivesspace_metadata" || pidType == "jstor_metadata" {
-		log.Printf("INFO: %s is an as metadata record", pid)
-		return generateFromExternal(svc.config, data)
-	} else if pidType == "component" {
-		log.Printf("INFO: %s is a component", pid)
-		return generateFromComponent(svc.config, pid, data)
-	}
-	log.Printf("ERROR: couldn't find %s", pid)
-	return "", http.StatusNotFound, fmt.Sprintf("PID %s not found", pid)
+	unitID, _ := strconv.Atoi(unit)
+	return generateFromTrackSys(svc.config, data, unitID)
 }
 
 //

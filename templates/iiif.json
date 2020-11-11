@@ -5,13 +5,7 @@
    {{- if .ExemplarPID}}
    "thumbnail":"{{.IiifURL}}/iiif/{{.ExemplarPID}}/full/!200,200/{{.ExemplarRotation}}/default.jpg",
    {{- end}}
-   "label":"{{.Title}}",
-   {{- if .Metadata}}
-   "metadata": {{.JSONMetadata}},
-   {{- end}}
-   "license":"{{.License}}",
    "logo":"{{.IiifURL}}/iiif/static:1/full/full/0/default.jpg",
-   "related":"http://search.lib.virginia.edu/catalog/{{.VirgoKey}}",
    "sequences":[
       {
          "startCanvas": "{{.IiifURL}}/iiif/dl/{{.MetadataPID}}/canvas/c{{.StartPage}}",

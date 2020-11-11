@@ -38,24 +38,7 @@ type IIIF struct {
 	ExemplarRotation string
 	License          string
 	Related          string
-	Metadata         map[string]string
 	MasterFiles      []MasterFile
-}
-
-// JSONMetadata takes the Metadata map and joins it
-// into a JSON friendly string of the format:
-//    [ {"label": "$KEY", "value": "$VAL"}, {...} ]
-//    with each ele separated by a comma
-func (iiif IIIF) JSONMetadata() string {
-	out := "[ "
-	for k, v := range iiif.Metadata {
-		if len(out) > 2 {
-			out = out + ", "
-		}
-		out = out + "{\"label\": \"" + k + "\", \"value\": \"" + v + "\"}"
-	}
-	out += " ]"
-	return out
 }
 
 // cleanString removes invalid characters from a string

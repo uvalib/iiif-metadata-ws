@@ -49,10 +49,6 @@ func getMetadataFromJSON(data *IIIF, jsonStr string) error {
 			catalogKey := child["value"].(string)
 			log.Printf("INFO: catalogKey: %s", catalogKey)
 			data.VirgoKey = catalogKey
-		case "callNumber":
-			callNum := child["value"].(string)
-			log.Printf("INFO: callNumber: %s", callNum)
-			data.Metadata["Call Number"] = callNum
 		case "useRights":
 			log.Printf("INFO: license: %s", child["valueURI"].(string))
 			data.License = child["valueURI"].(string)

@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"log"
 )
 
 // version of the service
-const version = "4.0.0"
+const version = "5.0.0"
 
 //
 // main entry point
