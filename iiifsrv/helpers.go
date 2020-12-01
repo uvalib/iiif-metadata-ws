@@ -54,7 +54,7 @@ func generateFromApollo(config *serviceConfig, data IIIF) (string, int, string) 
 	// Get some metadata about the collection from Apollo API...
 	PID := data.MetadataPID
 	apolloURL := fmt.Sprintf("%s/api/items/%s", config.apolloURL, PID)
-	respStr, err := getAPIResponse(apolloURL, standardHTTPClient)
+	_, respStr, err := getAPIResponse(apolloURL, standardHTTPClient)
 	if err != nil {
 		log.Printf("ERROR: apollo request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable communicate with Apollo: %s", err.Error())
@@ -71,7 +71,7 @@ func generateFromApollo(config *serviceConfig, data IIIF) (string, int, string) 
 
 	// Get masterFiles from TrackSys manifest API
 	tsURL := fmt.Sprintf("%s/api/manifest/%s", config.tracksysURL, data.MetadataPID)
-	respStr, err = getAPIResponse(tsURL, standardHTTPClient)
+	_, respStr, err = getAPIResponse(tsURL, standardHTTPClient)
 	if err != nil {
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
 		//c.String(http.StatusServiceUnavailable, "Unable retrieve manifest: %s", err.Error())
@@ -97,10 +97,14 @@ func generateFromTrackSys(config *serviceConfig, data IIIF, unitID int) (string,
 	if unitID > 0 {
 		tsURL = fmt.Sprintf("%s?unit=%d", tsURL, unitID)
 	}
-	respStr, err := getAPIResponse(tsURL, standardHTTPClient)
+	respStatus, respStr, err := getAPIResponse(tsURL, standardHTTPClient)
 	if err != nil {
+		status := http.StatusServiceUnavailable
+		if respStatus == http.StatusNotFound {
+			status = http.StatusNotFound
+		}
 		log.Printf("ERROR: tracksys manifest request failed: %s", err.Error())
-		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve manifest: %s", err.Error())
+		return "", status, fmt.Sprintf("Unable retrieve manifest: %s", err.Error())
 	}
 
 	getMasterFilesFromJSON(&data, respStr)
@@ -118,18 +122,18 @@ func generateFromTrackSys(config *serviceConfig, data IIIF, unitID int) (string,
 //
 // shared call to handle API calls
 //
-func getAPIResponse(url string, httpClient *http.Client) (string, error) {
+func getAPIResponse(url string, httpClient *http.Client) (int, string, error) {
 
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		log.Printf("ERROR: issuing request: %s, %s", url, err.Error())
-		return "", err
+		return http.StatusServiceUnavailable, "", err
 	}
 	defer resp.Body.Close()
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("ERROR: reading response: %s, %s", url, err.Error())
-		return "", err
+		return http.StatusServiceUnavailable, "", err
 	}
 	respString := string(bodyBytes)
 	if resp.StatusCode != http.StatusOK {
@@ -139,9 +143,9 @@ func getAPIResponse(url string, httpClient *http.Client) (string, error) {
 			logLevel = "INFO"
 		}
 		log.Printf("%s: %s returns %d (%s)", logLevel, url, resp.StatusCode, respString)
-		return "", errors.New(respString)
+		return resp.StatusCode, "", errors.New(respString)
 	}
-	return respString, nil
+	return resp.StatusCode, respString, nil
 }
 
 //

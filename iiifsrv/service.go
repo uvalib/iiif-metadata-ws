@@ -81,7 +81,7 @@ func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 	url := fmt.Sprintf("%s/api/pid/uva-lib:1157560/type", svc.config.tracksysURL)
 
 	tsStatus := healthcheck{true, ""}
-	_, err := getAPIResponse(url, fastHTTPClient)
+	_, _, err := getAPIResponse(url, fastHTTPClient)
 	if err != nil {
 		tsStatus.Healthy = false
 		tsStatus.Message = err.Error()
@@ -92,7 +92,7 @@ func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 	url = fmt.Sprintf("%s/version", svc.config.apolloURL)
 	apolloStatus := healthcheck{true, ""}
 
-	_, err = getAPIResponse(url, fastHTTPClient)
+	_, _, err = getAPIResponse(url, fastHTTPClient)
 	if err != nil {
 		apolloStatus.Healthy = false
 		apolloStatus.Message = err.Error()
@@ -125,7 +125,7 @@ func (svc *ServiceContext) ExistHandler(c *gin.Context) {
 
 	// otherwise, check tracksys to see if it knows about this item
 	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, pid)
-	resp, err := getAPIResponse(pidURL, standardHTTPClient)
+	_, resp, err := getAPIResponse(pidURL, standardHTTPClient)
 	if err != nil || resp == "masterfile" {
 		c.String(http.StatusNotFound, "IIIF Metadata does not exist for %s", pid)
 		return
@@ -237,7 +237,7 @@ func (svc *ServiceContext) AriesLookupHandler(c *gin.Context) {
 
 	id := c.Param("id")
 	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, id)
-	pidType, err := getAPIResponse(pidURL, standardHTTPClient)
+	_, pidType, err := getAPIResponse(pidURL, standardHTTPClient)
 	if err != nil {
 		log.Printf("ERROR: request to TrackSys %s failed: %s", pidURL, err.Error())
 		c.String(http.StatusNotFound, "id %s not found", id)
