@@ -77,6 +77,9 @@ func getMetadataFromJSON(data *IIIF, jsonStr string) error {
 
 // getMasterFilesFromJSON parses basic IIIF Metadata from an Apollo JSON API response
 func getMasterFilesFromJSON(data *IIIF, jsonStr string) {
+
+	//log.Printf("DEBUG: jsonStr [%s]", jsonStr)
+
 	var jsonArray []interface{}
 	json.Unmarshal([]byte(jsonStr), &jsonArray)
 	pgNum := 0
@@ -85,8 +88,14 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) {
 		mfJSON := mfInterface.(map[string]interface{})
 		var mf MasterFile
 		mf.PID = mfJSON["pid"].(string)
-		mf.Width = int(mfJSON["width"].(float64))
-		mf.Height = int(mfJSON["height"].(float64))
+		//mf.Width = int(mfJSON["width"].(float64))    // dont panic if the field is null
+		if width, ok := mfJSON["width"].(float64); ok {
+			mf.Width = int(width)
+		}
+		//mf.Height = int(mfJSON["height"].(float64))  // dont panic if the field is null
+		if height, ok := mfJSON["height"].(float64); ok {
+			mf.Height = int(height)
+		}
 		if title, ok := mfJSON["title"]; ok {
 			mf.Title = cleanString(title.(string))
 		}
