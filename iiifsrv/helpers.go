@@ -124,6 +124,7 @@ func generateFromTrackSys(config *serviceConfig, data IIIF, unitID int) (string,
 //
 func getAPIResponse(url string, httpClient *http.Client) (int, string, error) {
 
+	log.Printf("INFO: GET %s", url)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		log.Printf("ERROR: issuing request: %s, %s", url, err.Error())
