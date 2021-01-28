@@ -4,18 +4,6 @@ import (
 	"strings"
 )
 
-// BriefMetadata defines the basic metadata for an item as
-// returned by the TrackSys brief metadata API call
-type BriefMetadata struct {
-	PID        string
-	Title      string
-	Creator    string
-	Rights     string
-	Exemplar   string
-	CatalogKey string
-	CallNumber string
-}
-
 // MasterFile defines the metadata required to describe an image file
 type MasterFile struct {
 	PID         string
