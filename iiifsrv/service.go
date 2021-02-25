@@ -77,33 +77,36 @@ func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 		Healthy bool   `json:"healthy"`
 		Message string `json:"message"`
 	}
-	log.Printf("INFO: checking Tracksys...")
-	url := fmt.Sprintf("%s/api/pid/uva-lib:1157560/type", svc.config.tracksysURL)
 
-	tsStatus := healthcheck{true, ""}
-	_, _, err := getAPIResponse(url, fastHTTPClient)
-	if err != nil {
-		tsStatus.Healthy = false
-		tsStatus.Message = err.Error()
-	}
+	//log.Printf("INFO: checking Tracksys...")
+	//url := fmt.Sprintf("%s/api/pid/uva-lib:1157560/type", svc.config.tracksysURL)
+
+	//tsStatus := healthcheck{true, ""}
+	//_, _, err := getAPIResponse(url, fastHTTPClient)
+	//if err != nil {
+	//	tsStatus.Healthy = false
+	//	tsStatus.Message = err.Error()
+	//}
 
 	// make sure apollo service is alive
 	log.Printf("INFO: checking Apollo...")
-	url = fmt.Sprintf("%s/version", svc.config.apolloURL)
+	url := fmt.Sprintf("%s/version", svc.config.apolloURL)
 	apolloStatus := healthcheck{true, ""}
 
-	_, _, err = getAPIResponse(url, fastHTTPClient)
+	_, _, err := getAPIResponse(url, fastHTTPClient)
 	if err != nil {
 		apolloStatus.Healthy = false
 		apolloStatus.Message = err.Error()
 	}
 
 	httpStatus := http.StatusOK
-	if tsStatus.Healthy == false || apolloStatus.Healthy == false {
+//	if tsStatus.Healthy == false || apolloStatus.Healthy == false {
+	if apolloStatus.Healthy == false {
 		httpStatus = http.StatusInternalServerError
 	}
 
-	c.JSON(httpStatus, gin.H{"tracksys": tsStatus, "apollo": apolloStatus})
+//	c.JSON(httpStatus, gin.H{"tracksys": tsStatus, "apollo": apolloStatus})
+	c.JSON(httpStatus, gin.H{"apollo": apolloStatus})
 }
 
 // ExistHandler checks if there is IIIF data available for a PID
