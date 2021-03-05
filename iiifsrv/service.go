@@ -90,7 +90,7 @@ func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 
 	// make sure apollo service is alive
 	log.Printf("INFO: checking Apollo...")
-	url := fmt.Sprintf("%s/version", svc.config.apolloURL)
+	url := fmt.Sprintf("%s/healthcheck", svc.config.apolloURL)
 	apolloStatus := healthcheck{true, ""}
 
 	_, _, err := getAPIResponse(url, fastHTTPClient)
