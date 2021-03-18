@@ -78,7 +78,10 @@ func generateFromApollo(config *serviceConfig, data IIIF) (string, int, string) 
 		return "", http.StatusServiceUnavailable, fmt.Sprintf("Unable retrieve manifest: %s", err.Error())
 	}
 
-	getMasterFilesFromJSON(&data, respStr)
+	err = getMasterFilesFromJSON(&data, respStr)
+	if err != nil {
+		return "", http.StatusInternalServerError, fmt.Sprintf("ERROR: Unable to get masterfiles data for Apollo PID %s: %s", PID, err.Error())
+	}
 	var metadata string
 	metadata, err = renderIiifMetadata(data)
 	if err != nil {
@@ -107,7 +110,10 @@ func generateFromTrackSys(config *serviceConfig, data IIIF, unitID int) (string,
 		return "", status, fmt.Sprintf("Unable retrieve manifest: %s", err.Error())
 	}
 
-	getMasterFilesFromJSON(&data, respStr)
+	err = getMasterFilesFromJSON(&data, respStr)
+	if err != nil {
+		return "", http.StatusInternalServerError, fmt.Sprintf("ERROR: Unable to get masterfiles data for TS PID %s: %s", PID, err.Error())
+	}
 	var metadata string
 	metadata, err = renderIiifMetadata(data)
 	if err != nil {

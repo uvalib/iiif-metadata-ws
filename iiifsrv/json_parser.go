@@ -76,7 +76,7 @@ func getMetadataFromJSON(data *IIIF, jsonStr string) error {
 }
 
 // getMasterFilesFromJSON parses basic IIIF Metadata from an Apollo JSON API response
-func getMasterFilesFromJSON(data *IIIF, jsonStr string) {
+func getMasterFilesFromJSON(data *IIIF, jsonStr string) error {
 
 	type CloneData struct {
 		PID      string `json:"pid"`
@@ -97,7 +97,10 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) {
 	// log.Printf("DEBUG: jsonStr [%s]", jsonStr)
 
 	var jsonResp []ReserveRequest
-	json.Unmarshal([]byte(jsonStr), &jsonResp)
+	err := json.Unmarshal([]byte(jsonStr), &jsonResp)
+	if err != nil {
+		return err
+	}
 	pgNum := 0
 	for _, mfData := range jsonResp {
 		var mf MasterFile
@@ -134,6 +137,7 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) {
 		}
 		pgNum++
 	}
+	return nil
 }
 
 //
