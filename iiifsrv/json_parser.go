@@ -78,56 +78,59 @@ func getMetadataFromJSON(data *IIIF, jsonStr string) error {
 // getMasterFilesFromJSON parses basic IIIF Metadata from an Apollo JSON API response
 func getMasterFilesFromJSON(data *IIIF, jsonStr string) {
 
-	//log.Printf("DEBUG: jsonStr [%s]", jsonStr)
+	type CloneData struct {
+		PID      string `json:"pid"`
+		Filename string `json:"filename"`
+	}
+	type ReserveRequest struct {
+		PID         string     `json:"pid"`
+		Width       int        `json:"width"`
+		Height      int        `json:"height"`
+		Title       string     `json:"title"`
+		Description string     `json:"description"`
+		Orientation string     `json:"orientation"`
+		Filename    string     `json:"filename"`
+		Exemplar    bool       `json:"exemplar"`
+		ClonedFrom  *CloneData `json:"cloned_from"`
+	}
 
-	var jsonArray []interface{}
-	json.Unmarshal([]byte(jsonStr), &jsonArray)
+	// log.Printf("DEBUG: jsonStr [%s]", jsonStr)
+
+	var jsonResp []ReserveRequest
+	json.Unmarshal([]byte(jsonStr), &jsonResp)
 	pgNum := 0
-	for _, mfInterface := range jsonArray {
-		// Extract: pid, filename, width, height, title, description (optional)
-		mfJSON := mfInterface.(map[string]interface{})
+	for _, mfData := range jsonResp {
 		var mf MasterFile
-		mf.PID = mfJSON["pid"].(string)
-		//mf.Width = int(mfJSON["width"].(float64))    // dont panic if the field is null
-		if width, ok := mfJSON["width"].(float64); ok {
-			mf.Width = int(width)
+		mf.PID = mfData.PID
+		if mfData.ClonedFrom != nil && mfData.ClonedFrom.PID != "" {
+			// log.Printf("PID %s is a clone of %s", mf.PID, mfData.ClonedFrom.PID)
+			mf.PID = mfData.ClonedFrom.PID
 		}
-		//mf.Height = int(mfJSON["height"].(float64))  // dont panic if the field is null
-		if height, ok := mfJSON["height"].(float64); ok {
-			mf.Height = int(height)
-		}
-		if title, ok := mfJSON["title"]; ok {
-			mf.Title = cleanString(title.(string))
-		}
-		if desc, ok := mfJSON["description"]; ok {
-			mf.Description = cleanString(desc.(string))
-		}
-		if orientation, ok := mfJSON["orientation"]; ok {
-			axis := orientation.(string)
-			if axis == "flip_y_axis" {
-				mf.Rotation = "!0"
-			} else if axis == "rotate90" {
-				mf.Rotation = "90"
-			} else if axis == "rotate180" {
-				mf.Rotation = "180"
-			} else if axis == "rotate270" {
-				mf.Rotation = "270"
-			} else {
-				mf.Rotation = "0"
-			}
+		mf.Width = mfData.Width
+		mf.Height = mfData.Height
+		mf.Title = mfData.Title
+		mf.Description = mfData.Description
+
+		if mfData.Orientation == "flip_y_axis" {
+			mf.Rotation = "!0"
+		} else if mfData.Orientation == "rotate90" {
+			mf.Rotation = "90"
+		} else if mfData.Orientation == "rotate180" {
+			mf.Rotation = "180"
+		} else if mfData.Orientation == "rotate270" {
+			mf.Rotation = "270"
 		} else {
 			mf.Rotation = "0"
 		}
+
 		data.MasterFiles = append(data.MasterFiles, mf)
 
-		// if exemplar is set, see if it matches the current master file filename
-		// if it does, set the current page num as the start canvas
-		filename := mfJSON["filename"].(string)
-		if mfJSON["exemplar"] != nil {
+		// // if exemplar is set, set the current page num as the start canvas
+		if mfData.Exemplar {
 			data.StartPage = pgNum
 			data.ExemplarPID = mf.PID
 			data.ExemplarRotation = mf.Rotation
-			log.Printf("INFO: exemplar set to filename %s, page %d", filename, data.StartPage)
+			log.Printf("INFO: exemplar set to PID %s, page %d", mf.PID, data.StartPage)
 		}
 		pgNum++
 	}

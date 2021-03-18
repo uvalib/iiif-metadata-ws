@@ -9,7 +9,7 @@ import (
 )
 
 // version of the service
-const version = "5.0.0"
+const version = "5.0.1"
 
 //
 // main entry point
