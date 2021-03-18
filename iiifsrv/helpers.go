@@ -112,7 +112,7 @@ func generateFromTrackSys(config *serviceConfig, data IIIF, unitID int) (string,
 
 	err = getMasterFilesFromJSON(&data, respStr)
 	if err != nil {
-		return "", http.StatusInternalServerError, fmt.Sprintf("ERROR: Unable to get masterfiles data for TS PID %s: %s", PID, err.Error())
+		return "", http.StatusInternalServerError, fmt.Sprintf("ERROR: Unable to get masterfiles data for TS PID %s: %s", data.MetadataPID, err.Error())
 	}
 	var metadata string
 	metadata, err = renderIiifMetadata(data)
