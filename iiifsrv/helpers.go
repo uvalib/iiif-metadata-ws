@@ -173,11 +173,8 @@ func renderIiifMetadata(data IIIF) (string, error) {
 //
 // generate the cache key name
 //
-func cacheKey(path string, pid string, unit string) string {
+func cacheKey(path string, pid string) string {
 	name := fmt.Sprintf("%s-%s", path, pid)
-	if len(unit) != 0 {
-		name = fmt.Sprintf("%s-%s", name, unit)
-	}
 	// cleanup any special characters
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")

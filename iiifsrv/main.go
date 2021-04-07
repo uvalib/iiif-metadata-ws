@@ -9,7 +9,7 @@ import (
 )
 
 // version of the service
-const version = "5.0.1"
+const version = "6.0.0"
 
 //
 // main entry point
@@ -33,8 +33,9 @@ func main() {
 	router.GET("/pid/:pid", svc.IiifHandler)
 	router.GET("/pid/:pid/manifest.json", svc.IiifHandler)
 	router.GET("/pid/:pid/exist", svc.ExistHandler)
-	router.GET("/pidcache/:pid", svc.CacheHandler)
-	router.GET("/pidcache/:pid/manifest.json", svc.CacheHandler)
+	// TODO Retire these after TS gets updated
+	router.GET("/pidcache/:pid", svc.ExistHandler)
+	router.GET("/pidcache/:pid/manifest.json", svc.ExistHandler)
 	api := router.Group("/api")
 	{
 		api.GET("/aries", svc.AriesPingHandler)

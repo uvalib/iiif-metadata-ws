@@ -78,16 +78,6 @@ func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 		Message string `json:"message"`
 	}
 
-	//log.Printf("INFO: checking Tracksys...")
-	//url := fmt.Sprintf("%s/api/pid/uva-lib:1157560/type", svc.config.tracksysURL)
-
-	//tsStatus := healthcheck{true, ""}
-	//_, _, err := getAPIResponse(url, fastHTTPClient)
-	//if err != nil {
-	//	tsStatus.Healthy = false
-	//	tsStatus.Message = err.Error()
-	//}
-
 	// make sure apollo service is alive
 	log.Printf("INFO: checking Apollo...")
 	url := fmt.Sprintf("%s/healthcheck", svc.config.apolloURL)
@@ -100,12 +90,10 @@ func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 	}
 
 	httpStatus := http.StatusOK
-//	if tsStatus.Healthy == false || apolloStatus.Healthy == false {
 	if apolloStatus.Healthy == false {
 		httpStatus = http.StatusInternalServerError
 	}
 
-//	c.JSON(httpStatus, gin.H{"tracksys": tsStatus, "apollo": apolloStatus})
 	c.JSON(httpStatus, gin.H{"apollo": apolloStatus})
 }
 
@@ -113,13 +101,17 @@ func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
 func (svc *ServiceContext) ExistHandler(c *gin.Context) {
 	path := "pid"
 	pid := c.Param("pid")
-	unit := c.Query("unit")
-	key := cacheKey(path, pid, unit)
+	key := cacheKey(path, pid)
 
 	// if the manifest is already in the cache then return
 	if svc.config.cacheDisabled == false {
 		if svc.cache.IsInCache(key) == true {
-			c.String(http.StatusOK, "Cached IIIF Metadata exists for %s", pid)
+			cacheURL := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootURL, svc.config.cacheBucket, key)
+			c.JSON(http.StatusOK, gin.H{
+				"exists": true,
+				"cached": true,
+				"url":    cacheURL,
+			})
 			return
 		}
 	} else {
@@ -130,53 +122,17 @@ func (svc *ServiceContext) ExistHandler(c *gin.Context) {
 	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, pid)
 	_, resp, err := getAPIResponse(pidURL, standardHTTPClient)
 	if err != nil || resp == "masterfile" {
-		c.String(http.StatusNotFound, "IIIF Metadata does not exist for %s", pid)
+		c.JSON(http.StatusOK, gin.H{
+			"exists": false,
+			"cached": false,
+		})
 		return
 	}
 
-	log.Printf("IIIF Metadata exists for %s", pid)
-	c.String(http.StatusOK, "IIIF Metadata exists for %s", pid)
-}
-
-// CacheHandler processes a request for cached IIIF presentation metadata
-func (svc *ServiceContext) CacheHandler(c *gin.Context) {
-	if svc.config.cacheDisabled == true {
-		log.Printf("WARN: Request for cached item when cache is disabled")
-		c.String(http.StatusFailedDependency, "cache is disabled")
-		return
-	}
-
-	path := "pid"
-	pid := c.Param("pid")
-	unit := c.Query("unit")
-	refresh := c.Query("refresh")
-	key := cacheKey(path, pid, unit)
-	cacheURL := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootURL, svc.config.cacheBucket, key)
-
-	// if the manifest is not in the cache or we recreating the cache explicitly
-	if refresh == "true" || svc.cache.IsInCache(key) == false {
-
-		// generate the manifest data as appropriate
-		manifest, status, errorText := svc.generateManifest(cacheURL, pid, unit)
-
-		// error case
-		if status != http.StatusOK {
-			c.String(status, errorText)
-			return
-		}
-
-		// write it to the cache
-		err := svc.cache.WriteToCache(key, manifest)
-		if err != nil {
-			c.String(http.StatusInternalServerError, fmt.Sprintf("Error writing to cache: %s", err.Error()))
-			return
-		}
-	}
-
-	// happy day
-	vMap := make(map[string]string)
-	vMap["url"] = cacheURL
-	c.JSON(http.StatusOK, vMap)
+	c.JSON(http.StatusOK, gin.H{
+		"exists": true,
+		"cached": false,
+	})
 }
 
 // IiifHandler processes a request for IIIF presentation metadata
@@ -185,19 +141,22 @@ func (svc *ServiceContext) IiifHandler(c *gin.Context) {
 	path := "pid"
 	pid := c.Param("pid")
 	unit := c.Query("unit")
-	key := cacheKey(path, pid, unit)
+	nocache, _ := strconv.ParseBool(c.Query("nocache"))
+	refresh, _ := strconv.ParseBool(c.Query("refresh"))
+	key := cacheKey(path, pid)
 
-	// if the manifest is in the cache
-	if svc.config.cacheDisabled == false && svc.cache.IsInCache(key) == true {
+	// only read from the cache if these conditions are all true
+	log.Printf("Get IIIF manifest for %s", pid)
+	cacheRead := svc.config.cacheDisabled == false && nocache == false && unit == "" && refresh == false
 
-		// get it
+	// if the manifest is in the cache and cache reading is available...
+	if cacheRead && svc.cache.IsInCache(key) == true {
 		manifest, err := svc.cache.ReadFromCache(key)
 		if err != nil {
 			c.String(http.StatusInternalServerError, fmt.Sprintf("Error reading from cache: %s", err.Error()))
 			return
 		}
 
-		// happy day
 		c.Header(contentTypeHeader, contentType)
 		c.Header("Cache-Control", "no-store")
 		c.String(http.StatusOK, manifest)
@@ -207,24 +166,24 @@ func (svc *ServiceContext) IiifHandler(c *gin.Context) {
 		// generate the manifest data as appropriate
 		cacheURL := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootURL, svc.config.cacheBucket, key)
 		manifest, status, errorText := svc.generateManifest(cacheURL, pid, unit)
-
-		// error case
 		if status != http.StatusOK {
+			// NOTE: the error is already logged in the generateManifest call
 			c.String(status, errorText)
 			return
 		}
 
-		// write it to the cache
-		if svc.config.cacheDisabled == false {
+		// only write to the cache if these conditions are all true
+		cacheWrite := svc.config.cacheDisabled == false && unit == "" && (refresh == true || svc.cache.IsInCache(key) == false)
+		if cacheWrite {
 			err := svc.cache.WriteToCache(key, manifest)
 			if err != nil {
-				c.String(http.StatusInternalServerError, fmt.Sprintf("Error writing to cache: %s", err.Error()))
-				return
+				// this is not fatal... just log the error
+				log.Printf("ERROR: Unable to write pid %s manifest to cache: %s", pid, err.Error())
 			}
 		}
 
-		// happy day
 		c.Header(contentTypeHeader, contentType)
+		c.Header("Cache-Control", "no-store")
 		c.String(http.StatusOK, manifest)
 	}
 }
