@@ -173,7 +173,7 @@ func (svc *ServiceContext) IiifHandler(c *gin.Context) {
 		}
 
 		// only write to the cache if these conditions are all true
-		cacheWrite := svc.config.cacheDisabled == false && unit == "" && (refresh == true || svc.cache.IsInCache(key) == false)
+		cacheWrite := svc.config.cacheDisabled == false && nocache == false && unit == "" && (refresh == true || svc.cache.IsInCache(key) == false)
 		if cacheWrite {
 			err := svc.cache.WriteToCache(key, manifest)
 			if err != nil {
