@@ -146,11 +146,11 @@ func (svc *ServiceContext) IiifHandler(c *gin.Context) {
 	key := cacheKey(path, pid)
 
 	// only read from the cache if these conditions are all true
-	log.Printf("Get IIIF manifest for %s", pid)
 	cacheRead := svc.config.cacheDisabled == false && nocache == false && unit == "" && refresh == false
 
 	// if the manifest is in the cache and cache reading is available...
 	if cacheRead && svc.cache.IsInCache(key) == true {
+		log.Printf("Get IIIF manifest for %s from cache", pid)
 		manifest, err := svc.cache.ReadFromCache(key)
 		if err != nil {
 			c.String(http.StatusInternalServerError, fmt.Sprintf("Error reading from cache: %s", err.Error()))
@@ -162,8 +162,8 @@ func (svc *ServiceContext) IiifHandler(c *gin.Context) {
 		c.String(http.StatusOK, manifest)
 
 	} else {
-
 		// generate the manifest data as appropriate
+		log.Printf("Generate new IIIF manifest for %s", pid)
 		cacheURL := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootURL, svc.config.cacheBucket, key)
 		manifest, status, errorText := svc.generateManifest(cacheURL, pid, unit)
 		if status != http.StatusOK {
