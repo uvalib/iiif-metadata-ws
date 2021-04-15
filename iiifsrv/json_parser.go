@@ -82,7 +82,7 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) error {
 		PID      string `json:"pid"`
 		Filename string `json:"filename"`
 	}
-	type ReserveRequest struct {
+	type ManifestData struct {
 		PID         string     `json:"pid"`
 		Width       int        `json:"width"`
 		Height      int        `json:"height"`
@@ -96,7 +96,7 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) error {
 
 	// log.Printf("DEBUG: jsonStr [%s]", jsonStr)
 
-	var jsonResp []ReserveRequest
+	var jsonResp []ManifestData
 	err := json.Unmarshal([]byte(jsonStr), &jsonResp)
 	if err != nil {
 		return err
