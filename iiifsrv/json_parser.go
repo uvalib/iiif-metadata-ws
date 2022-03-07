@@ -111,8 +111,8 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) error {
 		}
 		mf.Width = mfData.Width
 		mf.Height = mfData.Height
-		mf.Title = mfData.Title
-		mf.Description = mfData.Description
+		mf.Title = jsonEscape(mfData.Title)
+		mf.Description = jsonEscape(mfData.Description)
 
 		if mfData.Orientation == "flip_y_axis" {
 			mf.Rotation = "!0"
@@ -138,6 +138,15 @@ func getMasterFilesFromJSON(data *IIIF, jsonStr string) error {
 		pgNum++
 	}
 	return nil
+}
+
+func jsonEscape(raw string) string {
+	b, err := json.Marshal(raw)
+	if err != nil {
+		log.Printf("ERROR: unable to escape [%s] for json: %s", raw, err)
+		return raw
+	}
+	return string(b[1 : len(b)-1])
 }
 
 //
