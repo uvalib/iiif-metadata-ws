@@ -93,7 +93,7 @@ func (svc *ServiceContext) getManifest(c *gin.Context) {
 	}
 
 	// Get data for all master files from units associated with the metadata record. Include unit if specified
-	log.Printf("Generate new IIIF manifest for %s", pid)
+	log.Printf("INFO: generate new iiif manifest for %s; get master file list", pid)
 	unitID, _ := strconv.Atoi(unit)
 	tsURL := fmt.Sprintf("%s/api/manifest/%s", svc.TracksysURL, pid)
 	if unitID > 0 {
@@ -114,9 +114,24 @@ func (svc *ServiceContext) getManifest(c *gin.Context) {
 
 	err := parseTrackSysManifest(&iiifData, string(respBytes))
 	if err != nil {
-		log.Printf("ERROR: Unable to parse masterfiles manifest data %s: %s", pid, err.Error())
+		log.Printf("ERROR: unable to parse masterfiles manifest data %s: %s", pid, err.Error())
 		c.String(http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	log.Printf("INFO: get title and content advisory for %s", pid)
+	tsURL = fmt.Sprintf("%s/api/pid/%s", svc.TracksysURL, pid)
+	respBytes, respErr = svc.getAPIResponse(tsURL)
+	if respErr != nil {
+		// not fatal, just log the error and carry on
+		log.Printf("ERROR: tracksys advisory request failed: %d:%s", respErr.StatusCode, respErr.Message)
+	} else {
+		var pidInfo PIDInfo
+		err := json.Unmarshal([]byte(respBytes), &pidInfo)
+		if err == nil {
+			iiifData.Title = pidInfo.Title
+			iiifData.ContentAdvisory = pidInfo.ContentAdvisory
+		}
 	}
 
 	manifestStr, err := svc.renderIIIF(iiifData)

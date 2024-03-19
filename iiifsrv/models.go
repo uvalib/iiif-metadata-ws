@@ -23,6 +23,12 @@ type ManifestData struct {
 	ClonedFrom  *CloneData `json:"clonedFrom"`
 }
 
+// PIDInfo contains top level metadata for a given PID (either metadata or component)
+type PIDInfo struct {
+	Title           string `json:"title"`
+	ContentAdvisory string `json:"advisory"`
+}
+
 // MasterFile defines the metadata required to describe an image file
 type MasterFile struct {
 	PID         string
@@ -40,6 +46,7 @@ type IIIF struct {
 	VirgoKey         string
 	MetadataPID      string
 	Title            string
+	ContentAdvisory  string
 	StartPage        int
 	ExemplarPID      string
 	ExemplarRotation string
