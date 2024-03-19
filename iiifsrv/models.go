@@ -4,6 +4,25 @@ import (
 	"strings"
 )
 
+// CloneData contsins the filename info for a master file that is a clone
+type CloneData struct {
+	PID      string `json:"pid"`
+	Filename string `json:"filename"`
+}
+
+// ManifestData is a record with details from a PID manifest resuest from the tracksys API
+type ManifestData struct {
+	PID         string     `json:"pid"`
+	Width       int        `json:"width"`
+	Height      int        `json:"height"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	Orientation string     `json:"orientation"`
+	Filename    string     `json:"filename"`
+	Exemplar    bool       `json:"exemplar"`
+	ClonedFrom  *CloneData `json:"clonedFrom"`
+}
+
 // MasterFile defines the metadata required to describe an image file
 type MasterFile struct {
 	PID         string
@@ -14,9 +33,9 @@ type MasterFile struct {
 	Rotation    string
 }
 
-// IIIF coontains all of the data necessary to render an IIIF manifest
+// IIIF contains all of the data necessary to render an IIIF manifest
 type IIIF struct {
-	IiifURL          string
+	IIIFServerURL    string
 	URL              string
 	VirgoKey         string
 	MetadataPID      string
@@ -39,7 +58,3 @@ func cleanString(str string) string {
 	safe = strings.Replace(safe, "\x0C", "", -1)   /* illegal in XML */
 	return safe
 }
-
-//
-// end of file
-//

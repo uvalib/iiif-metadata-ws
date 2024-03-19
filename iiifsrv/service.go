@@ -1,64 +1,104 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"path/filepath"
-	"strconv"
 	"strings"
+	"text/template"
+	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
 )
 
-// our content type definitions
-var contentTypeHeader = "content-type"
-var contentType = "application/json; charset=utf-8"
-
 // ServiceContext contains common data used by all handlers
 type ServiceContext struct {
-	config *serviceConfig
-	cache  *CacheProxy
+	HostName       string
+	TracksysURL    string
+	IIIFServerURL  string
+	ManifestBucket string
+	ManifestURL    string
+	IIIFTemplate   *template.Template
+	S3Client       *s3.Client
+	HTTPClient     *http.Client
 }
 
-// InitializeService will initialize the service context based on the config parameters.
-func InitializeService(cfg *serviceConfig) *ServiceContext {
+// RequestError contains error data from an HTTP API request
+type RequestError struct {
+	StatusCode int
+	Message    string
+}
 
+func initializeService(cfg *serviceConfig) *ServiceContext {
 	log.Printf("INFO: initializing service")
-
-	svc := ServiceContext{
-		config: cfg,
+	ctx := ServiceContext{
+		HostName:       cfg.hostName,
+		TracksysURL:    cfg.tracksysURL,
+		IIIFServerURL:  cfg.iiifURL,
+		ManifestBucket: cfg.cacheBucket,
+		ManifestURL:    cfg.cacheRootURL,
 	}
-	if cfg.cacheDisabled == false {
-		svc.cache = NewCacheProxy(cfg)
-	}
-	return &svc
-}
 
-// IgnoreHandler is a dummy to handle certain browser requests without warnings (e.g. favicons)
-func (svc *ServiceContext) IgnoreHandler(c *gin.Context) {
+	log.Printf("INFO: initialize s3 session...")
+	awsCfg, err := config.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		log.Fatal(fmt.Sprintf("unable to load s3 config: %s", err.Error()))
+	}
+	ctx.S3Client = s3.NewFromConfig(awsCfg)
+	log.Printf("INFO: s3 session established")
+
+	log.Printf("INFO: create http client...")
+	defaultTransport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 60 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          50,
+		MaxIdleConnsPerHost:   50,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	ctx.HTTPClient = &http.Client{
+		Transport: defaultTransport,
+		Timeout:   15 * time.Second,
+	}
+	log.Printf("INFO: http client created")
+
+	log.Printf("INFO: load iiif manifest template")
+	ctx.IIIFTemplate, err = template.New("iiif.json").ParseFiles("./templates/iiif.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("INFO: service initialized")
+	return &ctx
 }
 
 // FavHandler is a dummy handler to silence browser API requests that look for /favicon.ico
-func (svc *ServiceContext) FavHandler(c *gin.Context) {
+func (svc *ServiceContext) favIconHandler(c *gin.Context) {
 }
 
 // ConfigHandler dumps the current service config as json
-func (svc *ServiceContext) ConfigHandler(c *gin.Context) {
+func (svc *ServiceContext) configHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"service_host": svc.config.hostName,
-		"apollo":       svc.config.apolloURL,
-		"tracksys":     svc.config.tracksysURL,
-		"iiif":         svc.config.iiifURL,
+		"service_host": svc.HostName,
+		"tracksys":     svc.TracksysURL,
+		"iiif":         svc.IIIFServerURL,
 	})
 }
 
 // VersionHandler returns service version information
-func (svc *ServiceContext) VersionHandler(c *gin.Context) {
-
+func (svc *ServiceContext) versionHandler(c *gin.Context) {
 	build := "unknown"
-
-	// cos our CWD is the bin directory
 	files, _ := filepath.Glob("../buildtag.*")
 	if len(files) == 1 {
 		build = strings.Replace(files[0], "../buildtag.", "", 1)
@@ -71,163 +111,58 @@ func (svc *ServiceContext) VersionHandler(c *gin.Context) {
 }
 
 // HealthCheckHandler returns service health information (dummy for now, FIXME)
-func (svc *ServiceContext) HealthCheckHandler(c *gin.Context) {
-
+func (svc *ServiceContext) healthCheckHandler(c *gin.Context) {
 	type healthcheck struct {
 		Healthy bool   `json:"healthy"`
 		Message string `json:"message"`
 	}
 
-	// make sure apollo service is alive
-	log.Printf("INFO: checking Apollo...")
-	url := fmt.Sprintf("%s/healthcheck", svc.config.apolloURL)
-	apolloStatus := healthcheck{true, ""}
+	hcMap := make(map[string]healthcheck)
+	hcMap["iifman"] = healthcheck{Healthy: true}
 
-	_, _, err := getAPIResponse(url, fastHTTPClient)
+	c.JSON(http.StatusOK, hcMap)
+}
+
+func (svc *ServiceContext) getAPIResponse(url string) ([]byte, *RequestError) {
+	log.Printf("INFO: GET API Response from %s, timeout  %.0f sec", url, svc.HTTPClient.Timeout.Seconds())
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Add("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.128 Safari/537.36")
+
+	startTime := time.Now()
+	resp, rawErr := svc.HTTPClient.Do(req)
+	elapsedNanoSec := time.Since(startTime)
+	elapsedMS := int64(elapsedNanoSec / time.Millisecond)
+	bodyBytes, err := handleAPIResponse(url, resp, rawErr)
 	if err != nil {
-		apolloStatus.Healthy = false
-		apolloStatus.Message = err.Error()
+		log.Printf("ERROR: %s : %d:%s. Elapsed Time: %d (ms)", url, err.StatusCode, err.Message, elapsedMS)
+		return nil, err
 	}
 
-	httpStatus := http.StatusOK
-	if apolloStatus.Healthy == false {
-		httpStatus = http.StatusInternalServerError
-	}
-
-	c.JSON(httpStatus, gin.H{"apollo": apolloStatus})
+	log.Printf("INFO: successful response from %s. Elapsed Time: %d (ms)", url, elapsedMS)
+	return bodyBytes, nil
 }
 
-// ExistHandler checks if there is IIIF data available for a PID
-func (svc *ServiceContext) ExistHandler(c *gin.Context) {
-	path := "pid"
-	pid := c.Param("pid")
-	key := cacheKey(path, pid)
-
-	// if the manifest is already in the cache then return
-	if svc.config.cacheDisabled == false {
-		if svc.cache.IsInCache(key) == true {
-			cacheURL := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootURL, svc.config.cacheBucket, key)
-			c.JSON(http.StatusOK, gin.H{
-				"exists": true,
-				"cached": true,
-				"url":    cacheURL,
-			})
-			return
-		}
-	} else {
-		log.Printf("IIIF Cache is disabled")
-	}
-
-	// otherwise, check tracksys to see if it knows about this item
-	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, pid)
-	_, resp, err := getAPIResponse(pidURL, standardHTTPClient)
-	if err != nil || resp == "masterfile" {
-		c.JSON(http.StatusOK, gin.H{
-			"exists": false,
-			"cached": false,
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"exists": true,
-		"cached": false,
-	})
-}
-
-// IiifHandler processes a request for IIIF presentation metadata
-func (svc *ServiceContext) IiifHandler(c *gin.Context) {
-
-	path := "pid"
-	pid := c.Param("pid")
-	unit := c.Query("unit")
-	nocache, _ := strconv.ParseBool(c.Query("nocache"))
-	refresh, _ := strconv.ParseBool(c.Query("refresh"))
-	key := cacheKey(path, pid)
-
-	// only read from the cache if these conditions are all true
-	cacheRead := svc.config.cacheDisabled == false && nocache == false && unit == "" && refresh == false
-
-	// if the manifest is in the cache and cache reading is available...
-	if cacheRead && svc.cache.IsInCache(key) == true {
-		log.Printf("Get IIIF manifest for %s from cache", pid)
-		manifest, err := svc.cache.ReadFromCache(key)
-		if err != nil {
-			c.String(http.StatusInternalServerError, fmt.Sprintf("Error reading from cache: %s", err.Error()))
-			return
-		}
-
-		c.Header(contentTypeHeader, contentType)
-		c.Header("Cache-Control", "no-store")
-		c.String(http.StatusOK, manifest)
-
-	} else {
-		// generate the manifest data as appropriate
-		log.Printf("Generate new IIIF manifest for %s", pid)
-		cacheURL := fmt.Sprintf("%s/%s/%s", svc.config.cacheRootURL, svc.config.cacheBucket, key)
-		manifest, status, errorText := svc.generateManifest(cacheURL, pid, unit)
-		if status != http.StatusOK {
-			// NOTE: the error is already logged in the generateManifest call
-			c.String(status, errorText)
-			return
-		}
-
-		// only write to the cache if these conditions are all true
-		cacheWrite := svc.config.cacheDisabled == false && nocache == false && unit == "" && (refresh == true || svc.cache.IsInCache(key) == false)
-		if cacheWrite {
-			err := svc.cache.WriteToCache(key, manifest)
-			if err != nil {
-				// this is not fatal... just log the error
-				log.Printf("ERROR: Unable to write pid %s manifest to cache: %s", pid, err.Error())
-			}
-		}
-
-		c.Header(contentTypeHeader, contentType)
-		c.Header("Cache-Control", "no-store")
-		c.String(http.StatusOK, manifest)
-	}
-}
-
-// AriesPingHandler handles requests to the aries endpoint with no params.
-// Just returns and alive message
-func (svc *ServiceContext) AriesPingHandler(c *gin.Context) {
-	c.String(http.StatusOK, "IIIF Manifest Service Aries API")
-}
-
-// AriesLookupHandler will query apollo for information on the supplied identifer
-func (svc *ServiceContext) AriesLookupHandler(c *gin.Context) {
-
-	id := c.Param("id")
-	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.config.tracksysURL, id)
-	_, pidType, err := getAPIResponse(pidURL, standardHTTPClient)
+func handleAPIResponse(logURL string, resp *http.Response, err error) ([]byte, *RequestError) {
 	if err != nil {
-		log.Printf("ERROR: request to TrackSys %s failed: %s", pidURL, err.Error())
-		c.String(http.StatusNotFound, "id %s not found", id)
-		return
+		status := http.StatusBadRequest
+		errMsg := err.Error()
+		if strings.Contains(err.Error(), "Timeout") {
+			status = http.StatusRequestTimeout
+			errMsg = fmt.Sprintf("%s timed out", logURL)
+		} else if strings.Contains(err.Error(), "connection refused") {
+			status = http.StatusServiceUnavailable
+			errMsg = fmt.Sprintf("%s refused connection", logURL)
+		}
+		return nil, &RequestError{StatusCode: status, Message: errMsg}
+	} else if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		defer resp.Body.Close()
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		status := resp.StatusCode
+		errMsg := string(bodyBytes)
+		return nil, &RequestError{StatusCode: status, Message: errMsg}
 	}
-	if pidType == "invalid" || pidType == "masterfile" {
-		c.String(http.StatusNotFound, "id %s not found", id)
-		return
-	}
 
-	s := gin.H{"url": fmt.Sprintf("https://%s/pid/%s", svc.config.hostName, id), "protocol": "iiif-presentation"}
-	ids := []string{id}
-	c.JSON(http.StatusOK, gin.H{
-		"identifier":  ids,
-		"service_url": []interface{}{s},
-	})
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	return bodyBytes, nil
 }
-
-// generateManifest will generate the manifest content and return it or the http status and an error message
-func (svc *ServiceContext) generateManifest(url string, pid string, unit string) (string, int, string) {
-	var data IIIF
-	data.IiifURL = svc.config.iiifURL
-	data.URL = url
-	data.MetadataPID = pid
-	unitID, _ := strconv.Atoi(unit)
-	return generateFromTrackSys(svc.config, data, unitID)
-}
-
-//
-// end of file
-//

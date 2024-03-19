@@ -3,16 +3,16 @@
    "@id":"{{.URL}}",
    "@type":"sc:Manifest",
    {{- if .ExemplarPID}}
-   "thumbnail":"{{.IiifURL}}/iiif/{{.ExemplarPID}}/full/!200,200/{{.ExemplarRotation}}/default.jpg",
+   "thumbnail":"{{.IIIFServerURL}}/iiif/{{.ExemplarPID}}/full/!200,200/{{.ExemplarRotation}}/default.jpg",
    {{- end}}
-   "logo":"{{.IiifURL}}/iiif/static:1/full/full/0/default.jpg",
+   "logo":"{{.IIIFServerURL}}/iiif/static:1/full/full/0/default.jpg",
    "sequences":[
       {
-         "startCanvas": "{{.IiifURL}}/iiif/dl/{{.MetadataPID}}/canvas/c{{.StartPage}}",
+         "startCanvas": "{{.IIIFServerURL}}/iiif/dl/{{.MetadataPID}}/canvas/c{{.StartPage}}",
          "@type":"sc:Sequence",
          "canvases":[
             {{- $metadataPid := .MetadataPID -}}
-            {{- $iiifURL := .IiifURL -}}
+            {{- $iiifURL := .IIIFServerURL -}}
             {{- range $index, $element := .MasterFiles -}}
             {{- if $index}},{{end -}}
             {

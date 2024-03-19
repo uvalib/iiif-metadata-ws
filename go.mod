@@ -3,7 +3,9 @@ module github.com/uvalib/iiif-metadata-ws
 go 1.12
 
 require (
-	github.com/aws/aws-sdk-go v1.49.22
+	github.com/aws/aws-sdk-go-v2 v1.25.3
+	github.com/aws/aws-sdk-go-v2/config v1.27.7
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.52.0
 	github.com/bytedance/sonic v1.10.2 // indirect
 	github.com/chenzhuoyu/iasm v0.9.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
@@ -17,5 +19,4 @@ require (
 	golang.org/x/arch v0.7.0 // indirect
 	golang.org/x/net v0.20.0 // indirect
 	google.golang.org/protobuf v1.32.0 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
