@@ -129,8 +129,8 @@ func (svc *ServiceContext) getManifest(c *gin.Context) {
 		var pidInfo PIDInfo
 		err := json.Unmarshal([]byte(respBytes), &pidInfo)
 		if err == nil {
-			iiifData.Title = pidInfo.Title
-			iiifData.ContentAdvisory = pidInfo.ContentAdvisory
+			iiifData.Title = jsonEscape(pidInfo.Title)
+			iiifData.ContentAdvisory = jsonEscape(pidInfo.ContentAdvisory)
 		}
 	}
 

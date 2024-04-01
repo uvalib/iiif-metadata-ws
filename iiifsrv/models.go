@@ -1,9 +1,5 @@
 package main
 
-import (
-	"strings"
-)
-
 // CloneData contsins the filename info for a master file that is a clone
 type CloneData struct {
 	PID      string `json:"pid"`
@@ -53,15 +49,4 @@ type IIIF struct {
 	License          string
 	Related          string
 	MasterFiles      []MasterFile
-}
-
-// cleanString removes invalid characters from a string
-func cleanString(str string) string {
-	safe := strings.Replace(str, "\n", " ", -1)    /* escape for json */
-	safe = strings.Replace(safe, "\r", " ", -1)    /* escape for json */
-	safe = strings.Replace(safe, "\t", " ", -1)    /* escape for json */
-	safe = strings.Replace(safe, "\\", "\\\\", -1) /* escape for json */
-	safe = strings.Replace(safe, "\"", "\\\"", -1) /* escape for json */
-	safe = strings.Replace(safe, "\x0C", "", -1)   /* illegal in XML */
-	return safe
 }
