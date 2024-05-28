@@ -3,20 +3,12 @@ module github.com/uvalib/iiif-metadata-ws
 go 1.12
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.25.3
-	github.com/aws/aws-sdk-go-v2/config v1.27.7
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.52.0
-	github.com/bytedance/sonic v1.10.2 // indirect
-	github.com/chenzhuoyu/iasm v0.9.1 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
-	github.com/gin-contrib/cors v1.5.0
-	github.com/gin-gonic/gin v1.9.1
-	github.com/go-playground/validator/v10 v10.17.0 // indirect
-	github.com/klauspost/cpuid/v2 v2.2.6 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/pelletier/go-toml/v2 v2.1.1 // indirect
-	github.com/ugorji/go/codec v1.2.12 // indirect
-	golang.org/x/arch v0.7.0 // indirect
-	golang.org/x/net v0.20.0 // indirect
-	google.golang.org/protobuf v1.32.0 // indirect
+	github.com/aws/aws-sdk-go-v2 v1.27.0
+	github.com/aws/aws-sdk-go-v2/config v1.27.16
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.54.3
+	github.com/bytedance/sonic v1.11.7 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.4 // indirect
+	github.com/gin-contrib/cors v1.7.2
+	github.com/gin-gonic/gin v1.10.0
+	github.com/goccy/go-json v0.10.3 // indirect
 )
