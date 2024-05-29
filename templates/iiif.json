@@ -3,7 +3,14 @@
    "@id":"{{.URL}}",
    "@type":"sc:Manifest",
    {{- if .ExemplarPID}}
-   "thumbnail":"{{.IIIFServerURL}}/iiif/{{.ExemplarPID}}/full/!200,200/{{.ExemplarRotation}}/default.jpg",
+   "thumbnail": {
+      "@id":"{{.IIIFServerURL}}/iiif/{{.ExemplarPID}}/full/!200,200/{{.ExemplarRotation}}/default.jpg",
+      "service": {
+         "@context":"http://iiif.io/api/image/2/context.json",
+         "@id":"https://iiif.lib.virginia.edu/iiif/{{.MetadataPID}}",
+         "profile":"http://iiif.io/api/image/2/level1.json"
+      }
+   },
    {{- end}}
    {{- if .Title}}
    "label": "{{.Title}}",

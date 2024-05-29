@@ -9,7 +9,7 @@ import (
 )
 
 // version of the service
-const version = "6.2.0"
+const version = "6.3.0"
 
 // main entry point
 func main() {
