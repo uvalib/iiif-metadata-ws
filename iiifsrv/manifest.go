@@ -70,10 +70,16 @@ func (svc *ServiceContext) keyExist(key string) bool {
 func (svc *ServiceContext) getManifest(c *gin.Context) {
 	pid := c.Param("pid")
 	key := s3Key(pid)
-	keyExists := svc.keyExist(key)
 	unit := c.Query("unit")
 	nocache, _ := strconv.ParseBool(c.Query("nocache"))
 	refresh, _ := strconv.ParseBool(c.Query("refresh"))
+
+	// a key will not be cached for a request with a unit param. only check for cache
+	// when the unit param is not present
+	keyExists := false
+	if unit == "" {
+		keyExists = svc.keyExist(key)
+	}
 
 	// only read from the cache if these conditions are all true
 	cacheRead := nocache == false && unit == "" && refresh == false
@@ -196,6 +202,7 @@ func (svc *ServiceContext) renderIIIF(iiifData IIIF) (string, error) {
 }
 
 func parseTrackSysManifest(iiifData *IIIF, jsonStr string) error {
+	log.Printf("INFO: parse tracksys-api manifest response")
 	var parsedManifest []ManifestData
 	err := json.Unmarshal([]byte(jsonStr), &parsedManifest)
 	if err != nil {

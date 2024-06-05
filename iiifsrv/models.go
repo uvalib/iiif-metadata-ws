@@ -16,7 +16,7 @@ type ManifestData struct {
 	Orientation string     `json:"orientation"`
 	Filename    string     `json:"filename"`
 	Exemplar    bool       `json:"exemplar"`
-	ClonedFrom  *CloneData `json:"clonedFrom"`
+	ClonedFrom  *CloneData `json:"cloned_from"`
 }
 
 // PIDInfo contains top level metadata for a given PID (either metadata or component)
