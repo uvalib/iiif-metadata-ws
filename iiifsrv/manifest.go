@@ -34,7 +34,11 @@ func (svc *ServiceContext) manifestExist(c *gin.Context) {
 	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.TracksysURL, pid)
 	_, err := svc.getAPIResponse(pidURL)
 	if err != nil {
-		log.Printf("ERROR: check for %s in tracksys failed: %d:%s", pid, err.StatusCode, err.Message)
+		logLevel := "ERROR"
+		if err.StatusCode == http.StatusNotFound {
+			logLevel = "WARNING"
+		}
+		log.Printf("%s: check for %s in tracksys failed: %d (%s)", logLevel, pid, err.StatusCode, err.Message)
 		c.JSON(http.StatusOK, gin.H{
 			"exists": false,
 			"cached": false,
@@ -107,7 +111,12 @@ func (svc *ServiceContext) getManifest(c *gin.Context) {
 	}
 	respBytes, respErr := svc.getAPIResponse(tsURL)
 	if respErr != nil {
-		log.Printf("ERROR: tracksys manifest request failed: %d:%s", respErr.StatusCode, respErr.Message)
+		logLevel := "ERROR"
+		if respErr.StatusCode == http.StatusNotFound {
+			logLevel = "WARNING"
+		}
+
+		log.Printf("%s: tracksys manifest request failed: %d (%s)", logLevel, respErr.StatusCode, respErr.Message)
 		c.String(respErr.StatusCode, respErr.Message)
 		return
 	}
@@ -130,7 +139,7 @@ func (svc *ServiceContext) getManifest(c *gin.Context) {
 	respBytes, respErr = svc.getAPIResponse(tsURL)
 	if respErr != nil {
 		// not fatal, just log the error and carry on
-		log.Printf("ERROR: tracksys advisory request failed: %d:%s", respErr.StatusCode, respErr.Message)
+		log.Printf("WARNING: tracksys advisory request failed: %d (%s)", respErr.StatusCode, respErr.Message)
 	} else {
 		var pidInfo PIDInfo
 		err := json.Unmarshal([]byte(respBytes), &pidInfo)
@@ -214,7 +223,7 @@ func parseTrackSysManifest(iiifData *IIIF, jsonStr string) error {
 		var mf MasterFile
 		mf.PID = mfData.PID
 		if mfData.ClonedFrom != nil && mfData.ClonedFrom.PID != "" {
-			log.Printf("PID %s is a clone of %s", mf.PID, mfData.ClonedFrom.PID)
+			log.Printf("INFO: pid %s is a clone of %s", mf.PID, mfData.ClonedFrom.PID)
 			mf.PID = mfData.ClonedFrom.PID
 		}
 		mf.Width = mfData.Width
