@@ -162,7 +162,7 @@ func (svc *ServiceContext) getManifest(c *gin.Context) {
 		err := svc.writeManifestToCache(key, manifestStr)
 		if err != nil {
 			// this is not fatal... just log the error
-			log.Printf("ERROR: Unable to write pid %s manifest to cache: %s", pid, err.Error())
+			log.Printf("WARNING: unable to write pid %s manifest to cache: %s", pid, err.Error())
 		}
 	}
 

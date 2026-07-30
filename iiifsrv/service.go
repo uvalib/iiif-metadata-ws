@@ -134,7 +134,11 @@ func (svc *ServiceContext) getAPIResponse(url string) ([]byte, *RequestError) {
 	elapsedMS := int64(elapsedNanoSec / time.Millisecond)
 	bodyBytes, err := handleAPIResponse(url, resp, rawErr)
 	if err != nil {
-		log.Printf("ERROR: %s : %d:%s. Elapsed Time: %d (ms)", url, err.StatusCode, err.Message, elapsedMS)
+		logLevel := "ERROR"
+		if err.StatusCode == http.StatusNotFound {
+			logLevel = "WARNING"
+		}
+		log.Printf("%s: %s : %d (%s). Elapsed Time: %d (ms)", logLevel, url, err.StatusCode, err.Message, elapsedMS)
 		return nil, err
 	}
 
