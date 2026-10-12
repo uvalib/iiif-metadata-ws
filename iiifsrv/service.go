@@ -125,7 +125,11 @@ func (svc *ServiceContext) healthCheckHandler(c *gin.Context) {
 
 func (svc *ServiceContext) getAPIResponse(url string) ([]byte, *RequestError) {
 	log.Printf("INFO: GET API Response from %s, timeout  %.0f sec", url, svc.HTTPClient.Timeout.Seconds())
-	req, _ := http.NewRequest("GET", url, nil)
+	req, reqErr := http.NewRequest("GET", url, nil)
+	if reqErr != nil {
+		log.Printf("WARNING: unable to create request for %s: %s", url, reqErr.Error())
+		return nil, &RequestError{StatusCode: http.StatusBadRequest, Message: fmt.Sprintf("invalid request: %s", reqErr.Error())}
+	}
 	req.Header.Add("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.128 Safari/537.36")
 
 	startTime := time.Now()
