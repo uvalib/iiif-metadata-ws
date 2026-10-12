@@ -36,14 +36,19 @@ func (svc *ServiceContext) manifestExist(c *gin.Context) {
 	pidURL := fmt.Sprintf("%s/api/pid/%s/type", svc.TracksysURL, pid)
 	_, err := svc.getAPIResponse(pidURL)
 	if err != nil {
-		logLevel := "ERROR"
 		if err.StatusCode == http.StatusNotFound {
-			logLevel = "WARNING"
+			log.Printf("WARNING: pid %s not found in tracksys", pid)
+			c.JSON(http.StatusOK, gin.H{
+				"exists": false,
+				"cached": false,
+			})
+			return
 		}
-		log.Printf("%s: check for %s in tracksys failed: %d (%s)", logLevel, pid, err.StatusCode, err.Message)
-		c.JSON(http.StatusOK, gin.H{
-			"exists": false,
-			"cached": false,
+
+		// any other failure means existence could not be determined
+		log.Printf("ERROR: check for %s in tracksys failed: %d (%s)", pid, err.StatusCode, err.Message)
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": fmt.Sprintf("unable to determine if pid %s exists: %s", pid, err.Message),
 		})
 		return
 	}
