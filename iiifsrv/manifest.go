@@ -195,9 +195,10 @@ func (svc *ServiceContext) writeManifestToCache(key string, manifest string) err
 	log.Printf("INFO: write manifest to cache %s", key)
 	manifestReader := strings.NewReader(manifest)
 	_, err := svc.S3Client.PutObject(context.TODO(), &s3.PutObjectInput{
-		Bucket: aws.String(svc.ManifestBucket),
-		Key:    aws.String(key),
-		Body:   manifestReader,
+		Bucket:      aws.String(svc.ManifestBucket),
+		Key:         aws.String(key),
+		Body:        manifestReader,
+		ContentType: aws.String("application/json; charset=utf-8"),
 	})
 	return err
 }
