@@ -160,6 +160,11 @@ func (svc *ServiceContext) getManifest(c *gin.Context) {
 
 	// only write to the cache if these conditions are all true
 	cacheWrite := nocache == false && unit == "" && (refresh == true || keyExists == false)
+	if cacheWrite && len(iiifData.MasterFiles) == 0 {
+		// don't cache a manifest with no images; tracksys may not have them yet
+		log.Printf("INFO: manifest for %s has no master files; not caching", pid)
+		cacheWrite = false
+	}
 	if cacheWrite {
 		err := svc.writeManifestToCache(key, manifestStr)
 		if err != nil {
