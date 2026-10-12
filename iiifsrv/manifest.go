@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/gin-gonic/gin"
 )
 
@@ -54,17 +56,17 @@ func (svc *ServiceContext) manifestExist(c *gin.Context) {
 
 func (svc *ServiceContext) keyExist(key string) bool {
 	log.Printf("INFO: check cache for %s", key)
-	listResp, err := svc.S3Client.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
-		Bucket:  aws.String(svc.ManifestBucket),
-		Prefix:  aws.String(key),
-		MaxKeys: aws.Int32(1),
+	_, err := svc.S3Client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+		Bucket: aws.String(svc.ManifestBucket),
+		Key:    aws.String(key),
 	})
 	if err != nil {
-		log.Printf("ERROR: check for %s failed: %s", key, err.Error())
-		return false
-	}
-	if *listResp.KeyCount == 0 {
-		log.Printf("INFO: %s not found in cache", key)
+		var notFound *types.NotFound
+		if errors.As(err, &notFound) {
+			log.Printf("INFO: %s not found in cache", key)
+		} else {
+			log.Printf("ERROR: check for %s failed: %s", key, err.Error())
+		}
 		return false
 	}
 	log.Printf("INFO: %s found in cache", key)
